@@ -7,6 +7,7 @@ import os
 from datetime import datetime
 import wave
 from stt import STTEngine
+from schemas import SleepRecordCreate
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +21,7 @@ class VadWrapper:
     def __init__(
         self,
         model,
-        on_speech_end: Callable[[bytes], Coroutine],
+        on_speech_end: Callable[[SleepRecordCreate], Coroutine],
         stt_engine: STTEngine,
         sample_rate: int = 16000,
         chunk_samples: int = 512,
@@ -127,8 +128,18 @@ class VadWrapper:
                         if wav_path and self.stt_engine:
                             transcript = await self.stt_engine.transcribe(wav_path)
                             logger.info(f"STT 识别结果: {transcript}")
-
-                        await self._on_speech_end(speech_data)
+                            if transcript:
+                                # 16-bit PCM = 2 bytes per sample
+                                duration_seconds = len(speech_data) / (self.SAMPLE_RATE * 2)
+                                record_data = SleepRecordCreate(
+                                    timestamp=datetime.utcnow().isoformat(),
+                                    duration=round(duration_seconds, 2),
+                                    audio_url=wav_path,
+                                    transcription=transcript,
+                                    # confidence 字段将使用 dataclass 中定义的默认值 0.0
+                                    tags=[]  # 标签可以后续通过分析 transcription 生成
+                                )
+                                await self._on_speech_end(record_data)
                         self._speech_buffer.clear()
                         self.vad_iterator.reset_states()
 
@@ -157,7 +168,7 @@ class VadEngine:
         logger.info("Silero VAD 模型加载成功。")
 
     def get_vad_wrapper(
-        self, on_speech_end: Callable[[bytes], Coroutine], stt_engine: STTEngine
+        self, on_speech_end: Callable[[SleepRecordCreate], Coroutine], stt_engine: STTEngine
     ):
         """
         为每个客户端连接创建一个新的 VadWrapper 实例。

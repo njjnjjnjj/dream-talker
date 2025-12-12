@@ -8,6 +8,8 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from log import init_log
 from vad.engine import VadEngine
 from stt import get_stt_engine, STTEngine
+from database import init_db, add_record
+from schemas import SleepRecordCreate
 
 init_log()
 logger = logging.getLogger(__name__)
@@ -16,6 +18,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI 的生命周期事件，在应用启动时执行。"""
+    init_db()
     await startup_event()
     yield
 
@@ -51,12 +54,10 @@ async def websocket_binary(websocket: WebSocket):
     await websocket.accept()
     logger.info("WebSocket 连接已接受。")
 
-    async def on_speech_end(speech_data: bytes):
-        """当检测到语音片段结束时的回调函数。"""
-        logger.info(f"检测到语音片段，长度为 {len(speech_data)} 字节。")
-        # 在实际应用中，你可能会将此音频数据发送到语音转文本服务
-        # 或者将其回传给客户端进行处理。
-        # await websocket.send_bytes(speech_data)
+    async def on_speech_end(record_data: SleepRecordCreate):
+        """当检测到语音片段结束时的回调函数，将数据保存到数据库。"""
+        logger.info(f"接收到新的语音记录: {record_data}")
+        add_record(record_data)
 
     # 为当前 WebSocket 连接创建一个 VadWrapper 实例
     vad_wrapper = vad_engine.get_vad_wrapper(on_speech_end, stt_engine)
