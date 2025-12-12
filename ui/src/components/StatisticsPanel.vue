@@ -88,7 +88,7 @@ const weeklyActivityOptions = computed(() => ({
             data: props.dailyStats.map(stat => stat.count),
             itemStyle: {
                 color: '#6366f1',
-                borderRadius: [],
+                borderRadius:[4, 4, 0, 0],
             },
             barMaxWidth: 50,
         },
@@ -98,7 +98,7 @@ const weeklyActivityOptions = computed(() => ({
             data: props.dailyStats.map(stat => stat.avgDuration),
             itemStyle: {
                 color: '#334155',
-                borderRadius: [],
+                borderRadius:[4, 4, 0, 0],
             },
             barMaxWidth: 50,
         },
