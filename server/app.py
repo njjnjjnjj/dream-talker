@@ -1,6 +1,8 @@
 from contextlib import asynccontextmanager
 import logging
 import uvicorn
+import yaml
+import os
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 from log import init_log
@@ -26,7 +28,14 @@ vad_engine: VadEngine = None
 async def startup_event():
     """在应用启动时加载 VAD 模型。"""
     global vad_engine
-    vad_engine = VadEngine()
+    config_path = os.path.join(os.path.dirname(__file__), '.config.yaml')
+    config = {}
+    if os.path.exists(config_path):
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = yaml.safe_load(f)
+    
+    vad_config = config.get('vad', {})
+    vad_engine = VadEngine(vad_config=vad_config)
 
 
 @app.websocket("/vad")
