@@ -3,6 +3,9 @@ import numpy as np
 from typing import Callable, Coroutine
 import logging
 from silero_vad import VADIterator, load_silero_vad
+import os
+from datetime import datetime
+import wave
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +23,11 @@ class VadWrapper:
         self.SPEECH_PAD_MS = 250  # 在语音片段前后添加的静音填充，以防语音被意外切断
         self.THRESHOLD = 0.5  # VAD 检测的置信度阈值
         
+        # 用于存储音频数据
+        self.DATA_DIR = os.path.join(os.path.dirname(__file__), '..', 'data', 'records')
+        if not os.path.exists(self.DATA_DIR):
+            os.makedirs(self.DATA_DIR)
+
         # 当检测到语音片段结束时调用的异步回调函数
         self._on_speech_end = on_speech_end
         
@@ -42,6 +50,21 @@ class VadWrapper:
         self._speech_buffer = bytearray()
         # 标记当前是否处于说话状态
         self._is_speaking = False
+
+    def _save_audio(self, audio_bytes: bytes):
+        """将音频数据保存为 WAV 文件"""
+        filename = datetime.now().strftime("%Y%m%d_%H%M%S_%f") + ".wav"
+        filepath = os.path.join(self.DATA_DIR, filename)
+        
+        try:
+            with wave.open(filepath, 'wb') as wf:
+                wf.setnchannels(1)  # 单声道
+                wf.setsampwidth(2)  # 16-bit
+                wf.setframerate(self.SAMPLE_RATE)
+                wf.writeframes(audio_bytes)
+            logger.info(f"语音片段已保存至: {filepath}")
+        except Exception as e:
+            logger.error(f"保存音频文件失败: {e}")
 
     async def process(self, audio_bytes: bytes):
         """
@@ -85,8 +108,12 @@ class VadWrapper:
                         # 将当前块也添加到语音缓冲区
                         self._speech_buffer.extend(chunk)
                         logger.debug(f"检测到语音结束，片段大小: {len(self._speech_buffer)} 字节。")
+                        # 保存语音片段
+                        speech_data = bytes(self._speech_buffer)
+                        self._save_audio(speech_data)
+                        
                         # 触发语音结束回调
-                        await self._on_speech_end(bytes(self._speech_buffer))
+                        await self._on_speech_end(speech_data)
                         # 清空语音缓冲区，为下一段语音做准备
                         self._speech_buffer.clear()
                         # 重置 VAD 状态
