@@ -29,7 +29,6 @@ export const provideLanguage = () => {
 }
 
 export const useLanguage = () => {
-  debugger
   const context = inject<LanguageContextType>(LanguageSymbol)
   if (context === undefined) {
     throw new Error('useLanguage must be used within a LanguageProvider')

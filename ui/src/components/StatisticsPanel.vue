@@ -4,7 +4,7 @@ import { useLanguage } from '../composables/useLanguage';
 import { type DailyStats, type HourlyStat, type TagStat, type KeywordStat } from '../types';
 import KeywordHeatmap from './KeywordHeatmap.vue';
 import VChart from 'vue-echarts';
-import { use } from 'echarts/core';
+import { use, graphic } from 'echarts/core';
 import { BarChart, PieChart, LineChart } from 'echarts/charts';
 import {
     GridComponent,
@@ -37,7 +37,7 @@ const { t, language } = useLanguage();
 
 const totalEvents = computed(() => props.dailyStats.reduce((acc, curr) => acc + curr.count, 0));
 const avgDuration = computed(() => Math.round(props.dailyStats.reduce((acc, curr) => acc + curr.avgDuration, 0) / (props.dailyStats.length || 1)));
-const maxDay = computed(() => props.dailyStats.reduce((prev, current) => (prev.count > current.count) ? prev : current, props.dailyStats || { date: '-', count: 0, avgDuration: 0 }));
+const maxDay = computed(() => props.dailyStats.length === 0 ? { date: '-', count: 0, avgDuration: 0 } : props.dailyStats.reduce((prev, current) => (prev.count > current.count) ? prev : current));
 
 const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#8b5cf6'];
 
@@ -146,9 +146,9 @@ const hourlyDistributionOptions = computed(() => ({
             smooth: true,
             areaStyle: {
                 opacity: 1,
-                color: new d3.LinearGradient(0, 0, 0, 1, [
-                    { offset: 0.05, color: '#10b981', opacity: 0.3 },
-                    { offset: 0.95, color: '#10b981', opacity: 0 },
+                color: new graphic.LinearGradient(0, 0, 0, 1, [
+                    { offset: 0.05, color: 'rgba(16, 185, 129, 0.3)' },
+                    { offset: 0.95, color: 'rgba(16, 185, 129, 0)' },
                 ]),
             },
             itemStyle: {
