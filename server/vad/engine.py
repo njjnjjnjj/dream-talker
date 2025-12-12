@@ -6,6 +6,7 @@ from silero_vad import VADIterator, load_silero_vad
 import os
 from datetime import datetime
 import wave
+from stt import STTEngine
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,7 @@ class VadWrapper:
         self,
         model,
         on_speech_end: Callable[[bytes], Coroutine],
+        stt_engine: STTEngine,
         sample_rate: int = 16000,
         chunk_samples: int = 512,
         speech_pad_ms: int = 250,
@@ -40,11 +42,14 @@ class VadWrapper:
 
         # 当检测到语音片段结束时调用的异步回调函数
         self._on_speech_end = on_speech_end
+        self.stt_engine = stt_engine
 
         # 初始化 VAD 迭代器
         self.vad_iterator = VADIterator(
-            model, threshold=self.THRESHOLD, speech_pad_ms=self.SPEECH_PAD_MS
-        )  # 最短语音时长
+            model,
+            threshold=self.THRESHOLD,
+            speech_pad_ms=self.SPEECH_PAD_MS
+        )
 
         # 用于暂存从客户端接收到的音频数据
         self._incoming_buffer = bytearray()
@@ -60,8 +65,11 @@ class VadWrapper:
         # 标记当前是否处于说话状态
         self._is_speaking = False
 
-    def _save_audio(self, audio_bytes: bytes):
-        """将音频数据保存为 WAV 文件"""
+    def _save_audio(self, audio_bytes: bytes) -> str | None:
+        """
+        将音频数据保存为 WAV 文件。
+        :return: 成功则返回文件路径，失败则返回 None。
+        """
         filename = datetime.now().strftime("%Y%m%d_%H%M%S_%f") + ".wav"
         filepath = os.path.join(self.DATA_DIR, filename)
 
@@ -72,67 +80,58 @@ class VadWrapper:
                 wf.setframerate(self.SAMPLE_RATE)
                 wf.writeframes(audio_bytes)
             logger.info(f"语音片段已保存至: {filepath}")
+            return filepath
         except Exception as e:
             logger.error(f"保存音频文件失败: {e}")
+            return None
 
     async def process(self, audio_bytes: bytes):
         """
         处理从客户端流式传输过来的音频数据块。
         :param audio_bytes: 从 WebSocket 接收到的原始音频字节
         """
-        # 将新接收到的音频数据追加到输入缓冲区
         self._incoming_buffer.extend(audio_bytes)
 
-        # 只要缓冲区中的数据足够一个处理块，就循环处理
         while len(self._incoming_buffer) >= self.CHUNK_BYTES:
-            # 从缓冲区取出一个音频块
             chunk = self._incoming_buffer[: self.CHUNK_BYTES]
             del self._incoming_buffer[: self.CHUNK_BYTES]
 
-            # 将当前块添加到历史缓冲区，并确保其不超过最大长度
             self._history_buffer.extend(chunk)
             if len(self._history_buffer) > self._history_buffer_max_size:
                 start = len(self._history_buffer) - self._history_buffer_max_size
                 self._history_buffer = self._history_buffer[start:]
 
-            # 将 16-bit PCM 音频数据转换为 VAD 模型期望的 float tensor
             audio_tensor = (
                 torch.from_numpy(np.frombuffer(chunk, dtype=np.int16)).float() / 32768.0
             )
-            # 使用 VAD 迭代器进行语音活动检测
             speech_dict = self.vad_iterator(audio_tensor)
 
             if speech_dict:
-                # 检测到语音开始
                 if "start" in speech_dict:
                     if not self._is_speaking:
                         logger.debug("检测到语音开始")
                         self._is_speaking = True
-                        # 将历史缓冲区的数据（即填充部分）添加到语音缓冲区
                         self._speech_buffer.extend(self._history_buffer)
                         self._history_buffer.clear()
 
-                # 检测到语音结束
                 if "end" in speech_dict:
                     if self._is_speaking:
                         self._is_speaking = False
-                        # 将当前块也添加到语音缓冲区
                         self._speech_buffer.extend(chunk)
                         logger.debug(
                             f"检测到语音结束，片段大小: {len(self._speech_buffer)} 字节。"
                         )
-                        # 保存语音片段
                         speech_data = bytes(self._speech_buffer)
-                        self._save_audio(speech_data)
+                        wav_path = self._save_audio(speech_data)
 
-                        # 触发语音结束回调
+                        if wav_path and self.stt_engine:
+                            transcript = await self.stt_engine.transcribe(wav_path)
+                            logger.info(f"STT 识别结果: {transcript}")
+
                         await self._on_speech_end(speech_data)
-                        # 清空语音缓冲区，为下一段语音做准备
                         self._speech_buffer.clear()
-                        # 重置 VAD 状态
                         self.vad_iterator.reset_states()
 
-            # 如果当前正在说话，持续将音频块添加到语音缓冲区
             if self._is_speaking:
                 self._speech_buffer.extend(chunk)
 
@@ -153,14 +152,21 @@ class VadEngine:
 
     def __init__(self, vad_config: dict = None):
         logger.info("正在加载 Silero VAD 模型...")
-        # 根据用户要求，使用 pip 安装的包来加载模型，而不是 torch.hub
         self.model = load_silero_vad()
         self.vad_config = vad_config if vad_config is not None else {}
         logger.info("Silero VAD 模型加载成功。")
 
-    def get_vad_wrapper(self, on_speech_end: Callable[[bytes], Coroutine]):
+    def get_vad_wrapper(
+        self, on_speech_end: Callable[[bytes], Coroutine], stt_engine: STTEngine
+    ):
         """
         为每个客户端连接创建一个新的 VadWrapper 实例。
         :param on_speech_end: 语音片段结束时的回调函数
+        :param stt_engine: STT 引擎实例
         """
-        return VadWrapper(self.model, on_speech_end, **self.vad_config)
+        return VadWrapper(
+            self.model,
+            on_speech_end,
+            stt_engine=stt_engine,
+            **self.vad_config,
+        )

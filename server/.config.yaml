@@ -3,3 +3,8 @@ vad:
   chunk_samples: 512
   speech_pad_ms: 1000  # 梦话场景建议值：容忍更长的停顿
   threshold: 0.4      # 梦话场景建议值：对低音量更敏感
+
+stt:
+  type: "dummy"  # 指定要使用的 STT 引擎类型。可选值: "dummy"
+  # whisper: # 示例：未来 Whisper 引擎的配置
+  #   model_path: "path/to/your/whisper/model"

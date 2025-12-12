@@ -7,6 +7,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 from log import init_log
 from vad.engine import VadEngine
+from stt import get_stt_engine, STTEngine
 
 init_log()
 logger = logging.getLogger(__name__)
@@ -21,21 +22,27 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-# 全局 VAD 引擎实例
+# 全局 VAD 和 STT 引擎实例
 vad_engine: VadEngine = None
+stt_engine: STTEngine = None
 
 
 async def startup_event():
-    """在应用启动时加载 VAD 模型。"""
-    global vad_engine
+    """在应用启动时加载 VAD 和 STT 模型。"""
+    global vad_engine, stt_engine
     config_path = os.path.join(os.path.dirname(__file__), '.config.yaml')
     config = {}
     if os.path.exists(config_path):
         with open(config_path, 'r', encoding='utf-8') as f:
             config = yaml.safe_load(f)
     
+    # 初始化 VAD 引擎
     vad_config = config.get('vad', {})
     vad_engine = VadEngine(vad_config=vad_config)
+
+    # 初始化 STT 引擎
+    stt_config = config.get('stt', {})
+    stt_engine = get_stt_engine(stt_config)
 
 
 @app.websocket("/vad")
@@ -52,7 +59,7 @@ async def websocket_binary(websocket: WebSocket):
         # await websocket.send_bytes(speech_data)
 
     # 为当前 WebSocket 连接创建一个 VadWrapper 实例
-    vad_wrapper = vad_engine.get_vad_wrapper(on_speech_end)
+    vad_wrapper = vad_engine.get_vad_wrapper(on_speech_end, stt_engine)
 
     try:
         # 持续接收来自客户端的音频数据

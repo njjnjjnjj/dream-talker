@@ -90,7 +90,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 @app.post("/ws/connect")
-async def ws_connect(server_url: str = "ws://localhost:8569/vad"):
+async def ws_connect(server_url: str = "ws://127.0.0.1:8569/vad"):
     """HTTP 端点，用于触发 WebSocket 连接。"""
     if not recorder:
         raise HTTPException(status_code=500, detail="录音机未初始化")
