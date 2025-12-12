@@ -29,7 +29,7 @@ def init_log():
             "file": {
                 "class": "logging.handlers.RotatingFileHandler",
                 "formatter": "file",
-                "filename": "logs/client.log",
+                "filename": "logs/server.log",
                 "maxBytes": 1024 * 1024 * 5,  # 5 MB
                 "backupCount": 3,
                 "encoding": "utf-8",

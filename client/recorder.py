@@ -1,35 +1,47 @@
 import logging
-import queue
+import asyncio
 import sounddevice as sd
 
 logger = logging.getLogger(__name__)
 
 
 class Recorder:
-
+    """
+    录音机类，负责从麦克风捕获音频并将其放入异步队列中。
+    """
     def __init__(self, samplerate=16000, channels=1, dtype="int16"):
-        """Initializes the recorder."""
-        self.samplerate = samplerate
-        self.channels = channels
-        self.dtype = dtype
-        self.q = queue.Queue()
-        self.stream = None
-        self.is_recording = False
-        logger.debug("Recorder instance created.")
+        """初始化录音机。"""
+        self.samplerate = samplerate  # 采样率
+        self.channels = channels      # 声道数
+        self.dtype = dtype            # 数据类型
+        self.q = asyncio.Queue()      # 用于在回调和主异步循环之间传递音频数据的异步队列
+        self.loop = asyncio.get_running_loop()
+        self.stream = None            # sounddevice 的音频流对象
+        self.is_recording = False     # 录音状态标志
+        logger.debug("录音机实例已创建。")
 
     def _callback(self, indata, frames, time, status):
-        """This is called (from a separate thread) for each audio block."""
+        """
+        sounddevice 的回调函数，在每次捕获到音频块时被调用。
+        这个函数在一个单独的线程中运行。
+        """
         if status:
-            logger.warning(f"Sounddevice status: {status}")
-        self.q.put(indata.copy())
+            logger.warning(f"Sounddevice 状态: {status}")
+        
+        try:
+            # 使用从主线程获取的事件循环，确保线程安全
+            self.loop.call_soon_threadsafe(self.q.put_nowait, indata.copy())
+        except RuntimeError:
+            # 如果事件循环已经关闭，这可能会发生。
+            pass
 
     def start(self):
-        """Starts the audio recording."""
+        """开始录音。"""
         if self.is_recording:
-            logger.warning("Recorder is already running.")
+            logger.warning("录音机已在运行。")
             return
 
-        logger.info("Starting audio stream...")
+        logger.info("正在启动音频流...")
         self.stream = sd.InputStream(
             samplerate=self.samplerate,
             channels=self.channels,
@@ -38,18 +50,18 @@ class Recorder:
         )
         self.stream.start()
         self.is_recording = True
-        logger.info("Audio stream started.")
+        logger.info("音频流已启动。")
 
     def stop(self):
-        """Stops the audio recording."""
+        """停止录音。"""
         if not self.is_recording:
-            logger.warning("Recorder is not running.")
+            logger.warning("录音机未在运行。")
             return
 
-        logger.info("Stopping audio stream...")
+        logger.info("正在停止音频流...")
         if self.stream:
             self.stream.stop()
             self.stream.close()
             self.stream = None
         self.is_recording = False
-        logger.info("Audio stream stopped.")
+        logger.info("音频流已停止。")

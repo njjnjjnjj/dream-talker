@@ -9,4 +9,5 @@ dependencies = [
     "numpy>=2.3.5",
     "sounddevice>=0.5.3",
     "uvicorn>=0.38.0",
+    "websockets>=15.0.1",
 ]
