@@ -5,6 +5,6 @@ vad:
   threshold: 0.4      # 梦话场景建议值：对低音量更敏感
 
 stt:
-  type: "dummy"  # 指定要使用的 STT 引擎类型。可选值: "dummy"
+  type: "funasr"  # 指定要使用的 STT 引擎类型。可选值: "dummy", "funasr"
   # whisper: # 示例：未来 Whisper 引擎的配置
   #   model_path: "path/to/your/whisper/model"

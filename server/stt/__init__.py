@@ -1,6 +1,7 @@
 import logging
 from .base import STTEngine
 from .dummy_engine import DummySTTEngine
+from .funasr_engine import FunasrEngine
 
 logger = logging.getLogger(__name__)
 
@@ -9,6 +10,7 @@ logger = logging.getLogger(__name__)
 # 键是你在 config.yaml 中使用的引擎类型名称。
 ENGINE_REGISTRY = {
     "dummy": DummySTTEngine,
+    "funasr": FunasrEngine,
     # "whisper": WhisperEngine, # 示例：未来可以添加 Whisper 引擎
 }
 

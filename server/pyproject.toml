@@ -6,6 +6,8 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.124.2",
+    "funasr>=1.2.7",
+    "modelscope>=1.33.0",
     "silero-vad>=6.2.0",
     "uvicorn[standard]>=0.38.0",
 ]
