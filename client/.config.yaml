@@ -1,1 +1,3 @@
-server_url: "ws://192.168.31.24:8569/vad"
+server_url: "ws://127.0.0.1:8569/vad"
+recorder:
+  samplerate: 16000
