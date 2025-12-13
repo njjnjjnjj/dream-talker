@@ -6,13 +6,14 @@ import os
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from datetime import date
 from typing import List, Dict
+from pydantic import BaseModel # 导入 BaseModel 用于请求体
 
 from log import init_log
 from vad.engine import VadEngine
 from stt import get_stt_engine, STTEngine
 from database import init_db, add_record
 from schemas import MonthlyActivity, SleepRecordCreate, SleepRecord
-from records import get_records_by_date, get_audio_file_by_id, get_monthly_record_activity
+from records import get_records_by_date, get_audio_file_by_id, get_monthly_record_activity, update_record_favorite_status
 
 init_log()
 logger = logging.getLogger(__name__)
@@ -95,6 +96,20 @@ async def read_record_activity(year: int, month: int):
     获取指定月份每日的梦话记录数量。
     """
     return get_monthly_record_activity(year, month)
+
+
+class UpdateFavoriteRequest(BaseModel):
+    is_favorite: bool
+
+@app.put("/api/records/{record_id}/favorite")
+async def update_favorite_status(record_id: str, request: UpdateFavoriteRequest):
+    """
+    更新记录的收藏状态。
+    """
+    success = update_record_favorite_status(record_id, request.is_favorite)
+    if not success:
+        raise HTTPException(status_code=404, detail="Record not found or update failed")
+    return {"status": "success", "message": "Favorite status updated"}
 
 
 @app.get("/api/audio/{record_id}")

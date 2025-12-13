@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { type SleepRecord } from '../types';
 import { useLanguage } from '../composables/useLanguage';
+import { useRecordsApi } from '../api/records';
 
 interface RecordCardProps {
   record: SleepRecord;
@@ -12,6 +13,7 @@ const props = defineProps<RecordCardProps>();
 const emit = defineEmits(['updateRecord']);
 
 const { t, language } = useLanguage();
+const { updateRecordFavoriteStatus } = useRecordsApi();
 const isPlaying = ref(false);
 const currentTime = ref(0);
 const audioPlayer = ref<HTMLAudioElement | null>(null);
@@ -93,11 +95,20 @@ const formatTime = (seconds: number) => {
   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 };
 
-const toggleFavorite = () => {
-  if (props.onUpdateRecord) {
-    props.onUpdateRecord(props.record.id, { is_favorite: !props.record.is_favorite });
+const toggleFavorite = async () => {
+  const newFavoriteStatus = !props.record.is_favorite;
+  try {
+    await updateRecordFavoriteStatus(props.record.id, newFavoriteStatus);
+    // Optimistically update the local state
+    if (props.onUpdateRecord) {
+      props.onUpdateRecord(props.record.id, { is_favorite: newFavoriteStatus });
+    }
+    emit('updateRecord', props.record.id, { is_favorite: newFavoriteStatus });
+  } catch (error) {
+    console.error('Failed to update favorite status:', error);
+    // Revert UI if API call fails
+    // You might want to show a toast notification here
   }
-  emit('updateRecord', props.record.id, { is_favorite: !props.record.is_favorite });
 };
 
 const timeString = computed(() => new Date(props.record.timestamp).toLocaleTimeString(language.value === 'zh' ? 'zh-CN' : 'en-US', {

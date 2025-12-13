@@ -21,6 +21,7 @@ class SleepRecord:
     audio_url: str
     transcription: str
     confidence: float = 0.0
+    is_favorite: bool = False # 添加 is_favorite 字段
     tags: List[str] = field(default_factory=list)
 
 

@@ -1,7 +1,7 @@
 import os
 from fastapi import HTTPException
 from starlette.responses import FileResponse
-from datetime import date
+from datetime import date, datetime
 from database import get_db_connection
 from schemas import SleepRecord
 
@@ -16,7 +16,7 @@ def get_records_by_date(target_date: date) -> list[SleepRecord]:
         with get_db_connection() as conn:
             cursor = conn.cursor()
             query = """
-                SELECT r.id, r.timestamp, r.duration, r.audio_url, r.transcription, r.confidence, GROUP_CONCAT(t.name) as tags
+                SELECT r.id, r.timestamp, r.duration, r.audio_url, r.transcription, r.confidence, r.is_favorite, GROUP_CONCAT(t.name) as tags
                 FROM records r
                 LEFT JOIN record_tags rt ON r.id = rt.record_id
                 LEFT JOIN tags t ON rt.tag_id = t.id
@@ -36,6 +36,7 @@ def get_records_by_date(target_date: date) -> list[SleepRecord]:
                     audio_url=row['audio_url'],
                     transcription=row['transcription'],
                     confidence=row['confidence'],
+                    is_favorite=bool(row['is_favorite']), # 将数据库的 0/1 转换为布尔值
                     tags=tags
                 )
                 records.append(record)
@@ -100,3 +101,24 @@ def get_monthly_record_activity(year: int, month: int) -> MonthlyActivity:
         raise HTTPException(status_code=500, detail="Could not fetch monthly activity")
 
     return MonthlyActivity(activity=activity_data)
+
+def update_record_favorite_status(record_id: str, is_favorite: bool) -> bool:
+    """
+    更新指定记录的收藏状态。
+    """
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            # SQLite 存储布尔值为 0 或 1
+            favorite_value = 1 if is_favorite else 0
+            now = datetime.utcnow().isoformat() # 导入 datetime
+            
+            cursor.execute(
+                "UPDATE records SET is_favorite = ?, updated_at = ? WHERE id = ?",
+                (favorite_value, now, record_id)
+            )
+            conn.commit()
+            return cursor.rowcount > 0 # 如果更新了一行或多行，则返回 True
+    except Exception as e:
+        print(f"Error updating favorite status for record {record_id}: {e}")
+        raise HTTPException(status_code=500, detail="Could not update favorite status")

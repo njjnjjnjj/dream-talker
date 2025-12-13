@@ -69,6 +69,33 @@ export function useRecordsApi() {
     }
   };
 
+  /**
+   * Updates the favorite status of a sleep record.
+   * @param recordId - The ID of the record to update
+   * @param isFavorite - The new favorite status
+   */
+  const updateRecordFavoriteStatus = async (recordId: string, isFavorite: boolean) => {
+    isLoading.value = true;
+    error.value = null;
+    try {
+      const response = await fetch(`${API_BASE_URL}/records/${recordId}/favorite`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ is_favorite: isFavorite }),
+      });
+      if (!response.ok) {
+        throw new Error('Failed to update favorite status');
+      }
+      // Optionally, update the local records array if needed
+    } catch (err: any) {
+      error.value = err.message || 'An unknown error occurred';
+    } finally {
+      isLoading.value = false;
+    }
+  };
+
   return {
     records,
     monthlyActivity,
@@ -77,5 +104,6 @@ export function useRecordsApi() {
     fetchRecordsByDate,
     getAudioUrl,
     fetchMonthlyActivity,
+    updateRecordFavoriteStatus,
   };
 }
