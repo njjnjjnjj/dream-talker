@@ -14,6 +14,8 @@ const emit = defineEmits(['updateRecord']);
 const { t, language } = useLanguage();
 const isPlaying = ref(false);
 const currentTime = ref(0);
+const audioPlayer = ref<HTMLAudioElement | null>(null);
+const duration = ref(props.record.duration);
 
 // Create a static, consistent waveform pattern based on the record ID
 const waveformData = computed(() => {
@@ -22,60 +24,67 @@ const waveformData = computed(() => {
   return Array.from({ length: bars }, (_, i) => {
       const seed = props.record.id.charCodeAt(props.record.id.length - 1) + i;
       // Generate values between 20% and 100% height
-      return 20 + (Math.sin(seed) * 40 + 40); 
+      return 20 + (Math.sin(seed) * 40 + 40);
   });
 });
 
-let animationFrameId: number | null = null;
-let lastTime = performance.now();
+onMounted(() => {
+  const player = audioPlayer.value;
+  if (!player) return;
 
-onUnmounted(() => {
-  if (animationFrameId) {
-    cancelAnimationFrame(animationFrameId);
-  }
+  const updateCurrentTime = () => {
+    currentTime.value = player.currentTime;
+  };
+  
+  const setDuration = () => {
+      if (player.duration && isFinite(player.duration)) {
+          duration.value = player.duration;
+      }
+  };
+
+  const onPlayEnd = () => {
+    isPlaying.value = false;
+    player.currentTime = 0;
+  };
+
+  player.addEventListener('timeupdate', updateCurrentTime);
+  player.addEventListener('loadedmetadata', setDuration);
+  player.addEventListener('ended', onPlayEnd);
+
+  onUnmounted(() => {
+    player.removeEventListener('timeupdate', updateCurrentTime);
+    player.removeEventListener('loadedmetadata', setDuration);
+    player.removeEventListener('ended', onPlayEnd);
+  });
 });
 
 const togglePlay = () => {
+  const player = audioPlayer.value;
+  if (!player) return;
+
   if (isPlaying.value) {
-    isPlaying.value = false;
-    if (animationFrameId) cancelAnimationFrame(animationFrameId);
+    player.pause();
   } else {
-    isPlaying.value = true;
-    lastTime = performance.now();
-    animationFrameId = requestAnimationFrame(animatePlay);
-    
-    // If we are at the end, restart
-    if (currentTime.value >= props.record.duration) {
-      currentTime.value = 0;
+    if (player.ended) {
+      player.currentTime = 0;
     }
+    player.play();
   }
-};
-
-const animatePlay = (time: number) => {
-  const deltaTime = (time - lastTime) / 1000;
-  lastTime = time;
-
-  currentTime.value += deltaTime;
-  if (currentTime.value >= props.record.duration) {
-    isPlaying.value = false;
-    currentTime.value = props.record.duration;
-    if (animationFrameId) cancelAnimationFrame(animationFrameId);
-  } else {
-    animationFrameId = requestAnimationFrame(animatePlay);
-  }
+  isPlaying.value = !isPlaying.value;
 };
 
 const handleSeek = (event: MouseEvent) => {
+  const player = audioPlayer.value;
+  if (!player) return;
+  
   const target = event.currentTarget as HTMLDivElement;
   const rect = target.getBoundingClientRect();
   const x = event.clientX - rect.left;
   const percentage = Math.min(Math.max(x / rect.width, 0), 1);
-  const newTime = percentage * props.record.duration;
+  const newTime = percentage * duration.value;
   
+  player.currentTime = newTime;
   currentTime.value = newTime;
-  
-  // Optional: If we want to auto-play on seek, uncomment:
-  // if (!isPlaying.value) togglePlay();
 };
 
 const formatTime = (seconds: number) => {
@@ -86,9 +95,9 @@ const formatTime = (seconds: number) => {
 
 const toggleFavorite = () => {
   if (props.onUpdateRecord) {
-    props.onUpdateRecord(props.record.id, { isFavorite: !props.record.isFavorite });
+    props.onUpdateRecord(props.record.id, { is_favorite: !props.record.is_favorite });
   }
-  emit('updateRecord', props.record.id, { isFavorite: !props.record.isFavorite });
+  emit('updateRecord', props.record.id, { is_favorite: !props.record.is_favorite });
 };
 
 const timeString = computed(() => new Date(props.record.timestamp).toLocaleTimeString(language.value === 'zh' ? 'zh-CN' : 'en-US', {
@@ -101,6 +110,12 @@ const timeString = computed(() => new Date(props.record.timestamp).toLocaleTimeS
 
 <template>
   <div class="bg-slate-800 rounded-xl p-5 border border-slate-700/50 hover:border-slate-600 transition-all shadow-md group">
+    <audio
+      ref="audioPlayer"
+      :src="`/api/audio/${record.id}`"
+      preload="metadata"
+      class="hidden"
+    ></audio>
     
     <!-- Header Info -->
     <div class="flex justify-between items-start mb-4">
@@ -125,14 +140,14 @@ const timeString = computed(() => new Date(props.record.timestamp).toLocaleTimeS
       <button 
         @click="toggleFavorite"
         :class="`p-2 rounded-full transition-all ${
-          record.isFavorite 
-            ? 'text-amber-400 bg-amber-400/10 hover:bg-amber-400/20' 
+          record.is_favorite
+            ? 'text-amber-400 bg-amber-400/10 hover:bg-amber-400/20'
             : 'text-slate-600 hover:text-slate-400 hover:bg-slate-700'
         }`"
         title="Toggle Favorite"
       >
-        <!-- Star size={20} fill={record.isFavorite ? "currentColor" : "none"} -->
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" :fill="record.isFavorite ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-star"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        <!-- Star size={20} fill={record.is_favorite ? "currentColor" : "none"} -->
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" :fill="record.is_favorite ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-star"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
       </button>
     </div>
 
@@ -165,7 +180,7 @@ const timeString = computed(() => new Date(props.record.timestamp).toLocaleTimeS
                  v-for="(height, i) in waveformData"
                  :key="i" 
                  :class="`w-1 rounded-full transition-colors duration-150 ${
-                     (i / waveformData.length) <= (currentTime / record.duration) ? 'bg-indigo-500' : 'bg-slate-700 group-hover/waveform:bg-slate-600'
+                     (i / waveformData.length) <= (currentTime / duration) ? 'bg-indigo-500' : 'bg-slate-700 group-hover/waveform:bg-slate-600'
                  }`"
                  :style="{ height: `${height}%` }"
               />
@@ -176,7 +191,7 @@ const timeString = computed(() => new Date(props.record.timestamp).toLocaleTimeS
         <div class="flex-shrink-0 font-mono text-xs text-slate-400 w-20 text-right">
             <span :class="isPlaying ? 'text-indigo-400 font-bold' : ''">{{ formatTime(currentTime) }}</span>
             <span class="mx-1 opacity-50">/</span>
-            <span>{{ formatTime(record.duration) }}</span>
+            <span>{{ formatTime(duration) }}</span>
         </div>
     </div>
     

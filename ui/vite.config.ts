@@ -17,4 +17,18 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url))
     },
   },
+  server: {
+    proxy: {
+      // 代理 /api 请求
+      '/api': {
+        target: 'http://localhost:8569',
+        changeOrigin: true,
+      },
+      // 代理 /vad WebSocket 请求
+      '/vad': {
+        target: 'ws://localhost:8569',
+        ws: true,
+      },
+    },
+  },
 })

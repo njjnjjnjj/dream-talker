@@ -66,13 +66,20 @@ class VadWrapper:
         # 标记当前是否处于说话状态
         self._is_speaking = False
 
-    def _save_audio(self, audio_bytes: bytes) -> str | None:
+    def _save_audio(self, audio_bytes: bytes) -> tuple[str, str] | tuple[None, None]:
         """
         将音频数据保存为 WAV 文件。
-        :return: 成功则返回文件路径，失败则返回 None。
+        文件会保存在以当天日期 (YYYY-MM-DD) 命名的子目录中。
+        :return: 成功则返回 (完整文件路径, 相对路径)，失败则返回 (None, None)。
         """
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        date_dir = os.path.join(self.DATA_DIR, today_str)
+        if not os.path.exists(date_dir):
+            os.makedirs(date_dir)
+
         filename = datetime.now().strftime("%Y%m%d_%H%M%S_%f") + ".wav"
-        filepath = os.path.join(self.DATA_DIR, filename)
+        filepath = os.path.join(date_dir, filename)
+        relative_path = os.path.join(today_str, filename)
 
         try:
             with wave.open(filepath, "wb") as wf:
@@ -81,10 +88,10 @@ class VadWrapper:
                 wf.setframerate(self.SAMPLE_RATE)
                 wf.writeframes(audio_bytes)
             logger.info(f"语音片段已保存至: {filepath}")
-            return filepath
+            return filepath, relative_path
         except Exception as e:
             logger.error(f"保存音频文件失败: {e}")
-            return None
+            return None, None
 
     async def process(self, audio_bytes: bytes):
         """
@@ -123,10 +130,10 @@ class VadWrapper:
                             f"检测到语音结束，片段大小: {len(self._speech_buffer)} 字节。"
                         )
                         speech_data = bytes(self._speech_buffer)
-                        wav_path = self._save_audio(speech_data)
+                        full_wav_path, relative_wav_path = self._save_audio(speech_data)
 
-                        if wav_path and self.stt_engine:
-                            transcript = await self.stt_engine.transcribe(wav_path)
+                        if full_wav_path and self.stt_engine:
+                            transcript = await self.stt_engine.transcribe(full_wav_path)
                             logger.info(f"STT 识别结果: {transcript}")
                             if transcript:
                                 # 16-bit PCM = 2 bytes per sample
@@ -134,9 +141,9 @@ class VadWrapper:
                                 record_data = SleepRecordCreate(
                                     timestamp=datetime.utcnow().isoformat(),
                                     duration=round(duration_seconds, 2),
-                                    audio_url=wav_path,
+                                    audio_url=relative_wav_path,  # 使用相对路径
                                     transcription=transcript,
-                                    # confidence 字段将使用 dataclass 中定义的默认值 0.0
+                                    confidence=0.9, # FIXME: 临时写死
                                     tags=[]  # 标签可以后续通过分析 transcription 生成
                                 )
                                 await self._on_speech_end(record_data)

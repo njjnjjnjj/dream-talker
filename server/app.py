@@ -4,12 +4,15 @@ import uvicorn
 import yaml
 import os
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from datetime import date
+from typing import List
 
 from log import init_log
 from vad.engine import VadEngine
 from stt import get_stt_engine, STTEngine
 from database import init_db, add_record
-from schemas import SleepRecordCreate
+from schemas import SleepRecordCreate, SleepRecord
+from records import get_records_by_date, get_audio_file_by_id
 
 init_log()
 logger = logging.getLogger(__name__)
@@ -76,6 +79,22 @@ async def websocket_binary(websocket: WebSocket):
         # 发生其他异常时，同样重置 VAD 状态
         vad_wrapper.reset()
         logger.error(f"WebSocket 发生错误: {e}")
+
+
+@app.get("/api/records", response_model=List[SleepRecord])
+async def read_records_by_date(date: date):
+    """
+    获取指定日期的梦话记录。
+    """
+    return get_records_by_date(date)
+
+
+@app.get("/api/audio/{record_id}")
+async def stream_audio_file(record_id: str):
+    """
+    以文件流形式提供音频文件。
+    """
+    return get_audio_file_by_id(record_id)
 
 
 if __name__ == "__main__":

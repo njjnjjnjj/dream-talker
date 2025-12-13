@@ -1,16 +1,15 @@
 export type Language = 'en' | 'zh';
 
 export interface SleepRecord {
-  id: string;
-  timestamp: string; // ISO String
-  duration: number; // In seconds
-  audioUrl: string; // URL to blob or mock
-  transcription: string;
-  confidence: number; // STT confidence 0-1
-  tags: string[]; // e.g. "Mumbling", "Shouting", "Clear"
-  isFavorite: boolean;
-  // Legacy/Optional AI fields
-  imageUrl?: string; 
+  id: string;          // 数据库里的 ID (UUID)
+  timestamp: string;     // ISO 8601 格式的日期时间字符串
+  duration: number;      // 持续时间（秒）
+  audio_url: string;    // 音频文件的相对路径
+  transcription: string; // 语音转写的文本
+  confidence: number;    // STT 置信度
+  is_favorite: boolean;  // 是否收藏
+  tags: string[];        // 标签
+  image_url?: string;     // AI 生成的图片 URL（可选）
 }
 
 export interface KeywordStat {

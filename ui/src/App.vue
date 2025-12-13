@@ -2,16 +2,18 @@
 import { ref, onMounted, computed, watch } from 'vue';
 import { useLanguage } from './composables/useLanguage';
 import { type SleepRecord, type KeywordStat, type DailyStats, type HourlyStat, type TagStat } from './types';
+import { useRecordsApi } from './api/records';
 import DateSelector from './components/DateSelector.vue';
 import RecordCard from './components/RecordCard.vue';
 import StatisticsPanel from './components/StatisticsPanel.vue';
 import SearchBar from './components/SearchBar.vue';
-import { generateMockRecords, getKeywordStats, getWeeklyStats, getHourlyStats, getTagStats } from './services/mockData';
+import { getKeywordStats, getWeeklyStats, getHourlyStats, getTagStats } from './services/mockData';
 
 const { t, language, setLanguage } = useLanguage();
+const { records, isLoading, error, fetchRecordsByDate, getAudioUrl } = useRecordsApi();
+
 
 const selectedDate = ref<Date>(new Date());
-const records = ref<SleepRecord[]>([]);
 const activeTab = ref<'daily' | 'stats'>('daily');
 
 // Stats Data State
@@ -25,13 +27,9 @@ const searchTerm = ref('');
 const showFavoritesOnly = ref(false);
 
 // Load data on date or language change
-watch([selectedDate, language], () => {
-  // Simulate API fetch lag
-  const timer = setTimeout(() => {
-    records.value = generateMockRecords(selectedDate.value, language.value);
-    searchTerm.value = ''; // Reset search on date change
-  }, 300);
-  return () => clearTimeout(timer);
+watch(selectedDate, (newDate) => {
+  fetchRecordsByDate(newDate);
+  searchTerm.value = ''; // Reset search on date change
 }, { immediate: true });
 
 // Load static stats data
@@ -61,10 +59,17 @@ const handleUpdateRecord = (id: string, updates: Partial<SleepRecord>) => {
 const filteredRecords = computed(() => {
   return records.value.filter(record => {
     const matchesSearch = record.transcription.toLowerCase().includes(searchTerm.value.toLowerCase());
-    const matchesFav = showFavoritesOnly.value ? record.isFavorite : true;
+    const matchesFav = showFavoritesOnly.value ? record.is_favorite : true;
     return matchesSearch && matchesFav;
   });
 });
+
+const getRecordWithAudioUrl = (record: SleepRecord) => {
+  return {
+    ...record,
+    audioUrl: getAudioUrl(record.audio_path),
+  };
+};
 
 </script>
 
@@ -151,7 +156,7 @@ const filteredRecords = computed(() => {
             <RecordCard 
               v-for="record in filteredRecords"
               :key="record.id" 
-              :record="record" 
+              :record="getRecordWithAudioUrl(record)"
               @update-record="handleUpdateRecord"
             />
           </template>
