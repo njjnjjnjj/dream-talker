@@ -285,7 +285,7 @@ const tagDistributionOptions = computed(() => ({
         </div>
 
         <!-- 1. Header Summary Cards -->
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4"> <!-- Changed to grid-cols-1 for mobile, then sm:grid-cols-2 -->
             <div class="bg-slate-800 p-5 rounded-xl border border-slate-700 shadow-sm">
                 <div class="flex items-center gap-2 text-slate-400 mb-2">
                     <!-- Activity size={16} -->
@@ -325,7 +325,7 @@ const tagDistributionOptions = computed(() => ({
                     </svg>
                     <span class="text-xs uppercase font-semibold tracking-wider">{{ t.stats.loudestDay }}</span>
                 </div>
-                <div class="text-3xl font-bold text-white">{{ maxDay.date }}</div>
+                <div class="text-2xl sm:text-3xl font-bold text-white whitespace-nowrap">{{ maxDay.date }}</div> <!-- Reverted to larger font, but now has full width on smallest screens -->
             </div>
             <div class="bg-slate-800 p-5 rounded-xl border border-slate-700 shadow-sm">
                 <div class="flex items-center gap-2 text-slate-400 mb-2">

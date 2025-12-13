@@ -21,16 +21,29 @@ const currentTime = ref(0);
 const audioPlayer = ref<HTMLAudioElement | null>(null);
 const duration = ref(props.record.duration);
 
+// Responsive number of waveform bars
+const numWaveformBars = computed(() => {
+  // Adjust number of bars based on screen width or use a fixed small number for mobile
+  // For simplicity, let's use a fixed number for small screens, e.g., 30 bars
+  // You might want to use a more dynamic approach with window.innerWidth in a real app
+  return window.innerWidth < 500 ? 30 : 60; // Example: 30 bars for screens < 500px, 60 otherwise
+});
+
+
 // Create a static, consistent waveform pattern based on the record ID
 const waveformData = computed(() => {
-  const bars = 60;
+  const bars = numWaveformBars.value;
   // Simple pseudo-random generator seeded by id string length + index
   return Array.from({ length: bars }, (_, i) => {
-      const seed = props.record.id.charCodeAt(props.record.id.length - 1) + i;
-      // Generate values between 20% and 100% height
-      return 20 + (Math.sin(seed) * 40 + 40);
+       const seed = props.record.id.charCodeAt(props.record.id.length - 1) + i;
+       // Generate values between 20% and 100% height
+       return 20 + (Math.sin(seed) * 40 + 40);
   });
 });
+
+// To react to window.innerWidth changes, you'd typically need to
+// add a reactive state for width and update it on resize event.
+// For now, on initial load and potentially on orientation change, this will adapt.
 
 onMounted(() => {
   const player = audioPlayer.value;
@@ -178,7 +191,7 @@ const timeString = computed(() => new Date(props.record.timestamp).toLocaleTimeS
           </div>
           <div>
               <div class="flex items-center gap-2">
-                  <span class="text-lg font-bold font-mono tracking-tight text-white">{{ timeString }}</span>
+                  <span class="text-sm sm:text-base md:text-lg font-bold font-mono tracking-tight text-white">{{ timeString }}</span> <!-- Even smaller text on tiny mobile -->
                   <span v-if="record.confidence > 0.85" class="text-[10px] uppercase font-bold bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-500/20">
                       High Quality
                   </span>
@@ -204,7 +217,7 @@ const timeString = computed(() => new Date(props.record.timestamp).toLocaleTimeS
     </div>
 
     <!-- Audio Player Container -->
-    <div class="bg-slate-900/50 rounded-lg p-3 mb-4 border border-slate-700/50 flex items-center gap-4">
+    <div class="bg-slate-900/50 rounded-lg p-3 mb-4 border border-slate-700/50 flex items-center gap-2 sm:gap-4"> <!-- Reverted flex-wrap, adjusted gap -->
         <!-- Play/Pause Button -->
         <button
            @click="togglePlay"
@@ -241,12 +254,12 @@ const timeString = computed(() => new Date(props.record.timestamp).toLocaleTimeS
         </button>
 
         <!-- Interactive Waveform / Progress Bar -->
-        <div class="flex-1 h-full flex flex-col justify-center cursor-pointer group/waveform" @click="handleSeek">
+        <div class="flex-1 h-full flex flex-col justify-center cursor-pointer group/waveform min-w-[100px]" @click="handleSeek"> <!-- Removed sm:min-w-[178px] -->
            <!-- Visual Bars -->
            <div class="flex items-center justify-between h-8 gap-[2px]">
-              <div 
+              <div
                  v-for="(height, i) in waveformData"
-                 :key="i" 
+                 :key="i"
                  :class="`w-1 rounded-full transition-colors duration-150 ${
                      (i / waveformData.length) <= (currentTime / duration) ? 'bg-indigo-500' : 'bg-slate-700 group-hover/waveform:bg-slate-600'
                  }`"
@@ -256,9 +269,9 @@ const timeString = computed(() => new Date(props.record.timestamp).toLocaleTimeS
         </div>
 
         <!-- Time Display -->
-        <div class="flex-shrink-0 font-mono text-xs text-slate-400 w-20 text-right">
+        <div class="flex-shrink-0 font-mono text-[9px] xs:text-xs sm:text-sm text-slate-400 w-16 sm:w-20 text-right whitespace-nowrap"> <!-- Smallest possible font, always visible -->
             <span :class="isPlaying ? 'text-indigo-400 font-bold' : ''">{{ formatTime(currentTime) }}</span>
-            <span class="mx-1 opacity-50">/</span>
+            <span class="mx-0.5 opacity-50">/</span> <!-- Reduced mx -->
             <span>{{ formatTime(duration) }}</span>
         </div>
     </div>

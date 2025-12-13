@@ -128,9 +128,9 @@ const getDailySummary = (day: number) => {
       >
         <span :class="`text-sm ${isSelected(day) ? 'font-bold' : ''}`">{{ day }}</span>
         
-        <div class="flex items-center justify-center mt-0.5 gap-1">
+        <div class="flex items-center justify-center mt-0.5 gap-0.5"> <!-- Reduced gap -->
           <span v-if="getDailySummary(day).total_records > 0"
-                :class="`text-[10px] px-1.5 rounded-full font-medium ${
+                :class="`text-[9px] px-1 rounded-full font-medium ${ // Reduced font size and padding
                   isSelected(day)
                     ? 'bg-white/20 text-white'
                     : 'bg-indigo-500/20 text-indigo-400'
@@ -138,7 +138,7 @@ const getDailySummary = (day: number) => {
             {{ getDailySummary(day).total_records }}
           </span>
           <span v-if="getDailySummary(day).favorite_records > 0"
-                :class="`text-[10px] px-1.5 rounded-full font-medium ${
+                :class="`text-[9px] px-1 rounded-full font-medium ${ // Reduced font size and padding
                   isSelected(day)
                     ? 'bg-white/20 text-white'
                     : 'bg-amber-500/20 text-amber-400' // Yellow color for favorite records
