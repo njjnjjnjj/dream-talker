@@ -32,103 +32,150 @@ def load_config():
 class WebsocketManager:
     """
     管理与 VAD 服务器的 WebSocket 连接。
+    包括自动重连机制。
     """
     def __init__(self):
-        self.is_connected = False  # 连接状态标志
-        self._task: asyncio.Task = None  # 用于发送音频数据的后台任务
+        self.is_running = False  # 标记是否应该保持运行（包括重连）
+        self._manage_task: asyncio.Task = None  # 连接管理任务
+        self.server_url = ""
+        self.recorder = None
+        self.MAX_RECONNECT_ATTEMPTS = 3
+        self.RECONNECT_INTERVAL = 5  # seconds
 
     async def connect(self, recorder: Recorder, server_url: str):
         """
-        连接到 VAD 服务器，并启动一个后台任务来发送音频数据。
+        启动连接管理任务。
         :param recorder: 录音机实例
         :param server_url: VAD 服务器的 WebSocket URL
         """
-        if self.is_connected:
-            logger.warning("已经连接到服务器。")
+        if self.is_running:
+            logger.warning("连接任务已在运行中。")
             return
         
-        try:
-            # 建立 WebSocket 连接
-            websocket = await websockets.connect(server_url)
-            self.is_connected = True
-            # 开始录音
+        self.recorder = recorder
+        self.server_url = server_url
+        self.is_running = True
+        
+        # 启动后台管理任务
+        self._manage_task = asyncio.create_task(self._manage_connection())
+        logger.info(f"已启动连接管理任务，目标服务器: {server_url}")
+
+    async def _manage_connection(self):
+        """
+        后台任务：管理连接生命周期，处理连接建立和自动重连。
+        """
+        reconnect_attempts = 0
+
+        while self.is_running:
             try:
-                recorder.start()
-            except Exception as recorder_e:
-                logger.error(f"录音机启动失败: {recorder_e}")
-                self.is_connected = False
-                # 重新抛出异常，以便外部可以捕获并返回适当的 HTTP 响应
-                raise HTTPException(status_code=500, detail=f"录音机启动失败: {recorder_e}")
+                # 尝试建立连接并运行发送循环
+                # 如果是重连，先等待一段时间
+                if reconnect_attempts > 0:
+                     logger.info(f"将在 {self.RECONNECT_INTERVAL} 秒后尝试第 {reconnect_attempts}/{self.MAX_RECONNECT_ATTEMPTS} 次重连...")
+                     await asyncio.sleep(self.RECONNECT_INTERVAL)
 
-            async def sender(ws):
-                """
-                这是一个后台任务，它从录音机的队列中获取音频数据，
-                在必要时进行重采样，然后通过 WebSocket 发送到服务器。
-                """
-                target_samplerate = config.get("recorder", {}).get("target_samplerate", 16000)
+                logger.info("正在尝试连接 VAD 服务器...")
+                await self._connect_and_run_sender()
                 
-                while self.is_connected:
-                    try:
-                        audio_data_int16 = await recorder.q.get() # 这是 numpy 数组
+                # 如果 _connect_and_run_sender 正常返回，说明是用户主动断开（is_running变为False）
+                # 或者连接意外断开但没抛出异常（这取决于实现，目前的实现会抛出异常）
+                # 这里我们假设正常返回意味着不需要重连
+                reconnect_attempts = 0 # 重置计数器
 
-                        # 检查是否需要重采样
-                        if recorder.device_samplerate != target_samplerate:
-                            # sounddevice 默认提供 (n_frames, 1) 的 2D 数组，resampy 需要 1D 数组。
-                            # 先将其压平为 1D 数组，然后转换类型。
-                            audio_data_float32 = audio_data_int16.flatten().astype(np.float32) / 32768.0
-                            
-                            # 执行重采样，并明确指定使用 'kaiser_fast' 滤波器
-                            # 这是性能最高的选项，适用于实时性要求高的场景
-                            resampled_data_float32 = resampy.resample(
-                                audio_data_float32,
-                                sr_orig=recorder.device_samplerate,
-                                sr_new=target_samplerate,
-                                filter='kaiser_fast'
-                            )
-                            
-                            # 将重采样后的 float32 转回 int16 以便发送
-                            final_audio_data = (resampled_data_float32 * 32768.0).astype(np.int16)
-                        else:
-                            # 如果采样率相同，直接发送
-                            final_audio_data = audio_data_int16
-                        
-                        await ws.send(final_audio_data.tobytes())
-                            
-                    except asyncio.CancelledError:
-                        # 当任务被取消时，退出循环
+            except Exception as e:
+                logger.error(f"连接或发送过程中发生错误: {e}")
+                # 检查是否应该重连
+                if self.is_running:
+                    reconnect_attempts += 1
+                    if reconnect_attempts > self.MAX_RECONNECT_ATTEMPTS:
+                        logger.error("达到最大重连次数，停止尝试。")
+                        self.is_running = False
                         break
-                    except Exception:
-                        logger.error("音频发送循环发生错误", exc_info=True)
-                        # 这里可以选择是否断开连接，或者尝试继续
-                        # 为了稳健性，如果只是偶尔的错误，也许可以继续，
-                        # 但如果连接已断开，ws.send 会抛出异常，此时应该退出
-                        if ws.closed:
-                             logger.warning("WebSocket 连接已关闭，停止发送任务。")
-                             break
-                # 任务结束时，停止录音并关闭 WebSocket 连接
-                recorder.stop()
-                await ws.close()
+                else:
+                    # 如果用户已经请求停止，就不再重连
+                    break
 
-            # 创建并启动后台发送任务
-            self._task = asyncio.create_task(sender(websocket))
-            logger.info(f"已连接到 VAD 服务器: {server_url}")
-        except Exception as e:
-            logger.error(f"连接 VAD 服务器失败: {e}", exc_info=True)
-            self.is_connected = False
+    async def _connect_and_run_sender(self):
+        """
+        建立单次 WebSocket 连接并运行发送循环。
+        如果连接断开或发生错误，会抛出异常以便上层捕获并触发重连。
+        """
+        try:
+            async with websockets.connect(self.server_url) as websocket:
+                logger.info(f"已连接到 VAD 服务器: {self.server_url}")
+                
+                # 连接成功，重置重连计数器的逻辑在上层
+                
+                # 启动录音
+                try:
+                    self.recorder.start()
+                except Exception as e:
+                    logger.error(f"录音机启动失败: {e}")
+                    raise # 抛出异常，触发重连逻辑（或者如果是硬件错误，可能需要停止重连？）
+
+                try:
+                    target_samplerate = config.get("recorder", {}).get("target_samplerate", 16000)
+                    
+                    while self.is_running:
+                        try:
+                            # 设置超时，如果录音机队列长时间为空，不应该阻塞所有操作
+                            # 这里使用 wait_for 并捕获 TimeoutError 也可以，
+                            # 但为了简单，我们假设 recorder.q.get() 总是能在合理时间内返回
+                            # 或者我们可以让其一直等待，直到 task 被 cancel
+                            audio_data_int16 = await self.recorder.q.get()
+
+                            # 检查是否需要重采样
+                            if self.recorder.device_samplerate != target_samplerate:
+                                audio_data_float32 = audio_data_int16.flatten().astype(np.float32) / 32768.0
+                                resampled_data_float32 = resampy.resample(
+                                    audio_data_float32,
+                                    sr_orig=self.recorder.device_samplerate,
+                                    sr_new=target_samplerate,
+                                    filter='kaiser_fast'
+                                )
+                                final_audio_data = (resampled_data_float32 * 32768.0).astype(np.int16)
+                            else:
+                                final_audio_data = audio_data_int16
+                            
+                            await websocket.send(final_audio_data.tobytes())
+                                
+                        except asyncio.CancelledError:
+                            raise # 允许任务被取消
+                        except Exception as e:
+                            logger.error("音频发送循环发生错误", exc_info=True)
+                            # 如果 WebSocket 已关闭，抛出异常以触发重连
+                            if websocket.closed:
+                                raise ConnectionError("WebSocket closed") from e
+                            # 其他错误（如重采样失败），可能不需要断开连接，视情况而定
+                            # 暂时继续
+                            
+                finally:
+                    # 确保退出循环时停止录音
+                    self.recorder.stop()
+                    
+        except (websockets.exceptions.ConnectionClosedError, ConnectionRefusedError, ConnectionError) as e:
+            logger.warning(f"WebSocket 连接中断: {e}")
+            raise # 重新抛出，让 _manage_connection 处理重连
 
     async def disconnect(self):
-        """断开与 VAD 服务器的连接，并停止后台任务。"""
-        if not self.is_connected:
-            logger.warning("未连接到服务器。")
+        """用户主动请求断开连接。"""
+        if not self.is_running:
+            logger.warning("未连接到服务器或已停止。")
             return
 
-        self.is_connected = False
-        if self._task:
-            # 取消后台任务并等待其完成
-            self._task.cancel()
-            await self._task
+        logger.info("正在断开连接...")
+        self.is_running = False # 设置标志位，通知所有循环停止
         
-        logger.info("已从 VAD 服务器断开。")
+        if self._manage_task:
+            # 取消管理任务
+            self._manage_task.cancel()
+            try:
+                await self._manage_task
+            except asyncio.CancelledError:
+                pass
+            self._manage_task = None
+        
+        logger.info("已停止录音并断开连接。")
 
 # 全局 WebSocket 管理器和录音机实例
 websocket_manager = WebsocketManager()
@@ -158,7 +205,7 @@ async def lifespan(app: FastAPI):
     recorder = Recorder()
     yield
     # 在应用关闭时，确保断开 WebSocket 连接
-    if websocket_manager.is_connected:
+    if websocket_manager.is_running:
         await websocket_manager.disconnect()
 
 app = FastAPI(lifespan=lifespan)
