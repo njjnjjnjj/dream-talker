@@ -137,7 +137,8 @@ async def lifespan(app: FastAPI):
     # 我们在启动时执行一次虚拟的重采样操作，以提前触发编译。
     try:
         logger.info("正在预热音频重采样编译器 (numba)...")
-        _warmup_input = np.zeros(1, dtype=np.float32)
+        # resampy 需要一个足够长的信号来进行有意义的重采样，这里使用 1024 个样本
+        _warmup_input = np.zeros(1024, dtype=np.float32)
         resampy.resample(_warmup_input, 48000, 16000)
         logger.info("编译器预热成功。")
     except Exception as e:

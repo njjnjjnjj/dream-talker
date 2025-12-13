@@ -53,11 +53,14 @@ class Recorder:
             self.device_samplerate = int(device_info['default_samplerate'])
             logger.info(f"检测到默认输入设备的采样率为: {self.device_samplerate} Hz")
             
+            # 明确设置 blocksize 可以提供更大的缓冲区，减少 input overflow 的风险
+            # 1024 帧对于 48kHz 采样率来说，大约是 21ms 的数据
             self.stream = sd.InputStream(
                 samplerate=self.device_samplerate,
                 channels=self.channels,
                 dtype=self.dtype,
                 callback=self._callback,
+                blocksize=1024
             )
             self.stream.start()
             self.is_recording = True
