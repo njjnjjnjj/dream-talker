@@ -57,10 +57,27 @@ def init_log():
                 "level": "WARNING",
                 "propagate": False,
             },
+            # 为您自己的应用程序代码（例如 app.py, recorder.py）设置一个 logger
+            # logging.getLogger(__name__) 会使用模块名，所以我们可以匹配根命名空间
+            "app": {
+                "handlers": ["console", "file"],
+                "level": "DEBUG",
+                "propagate": False,
+            },
+             "recorder": {
+                "handlers": ["console", "file"],
+                "level": "DEBUG",
+                "propagate": False,
+            },
+             "numba": {
+                "handlers": ["console", "file"],
+                "level": "INFO", # 将 numba 的日志级别设为 INFO
+                "propagate": False,
+            },
         },
         "root": {
             "handlers": ["console", "file"],
-            "level": "DEBUG",
+            "level": "INFO", # 将 root logger 的默认级别提高到 INFO
         },
     }
 

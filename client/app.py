@@ -130,6 +130,20 @@ async def lifespan(app: FastAPI):
     """FastAPI 的生命周期事件，在应用启动时初始化录音机。"""
     global recorder
     load_config() # 在应用启动时加载配置
+
+    # -- Numba JIT 编译器预热 --
+    # resampy 内部使用 numba，首次调用会有一个显著的编译延迟，
+    # 这会阻塞异步事件循环，导致音频 input overflow。
+    # 我们在启动时执行一次虚拟的重采样操作，以提前触发编译。
+    try:
+        logger.info("正在预热音频重采样编译器 (numba)...")
+        _warmup_input = np.zeros(1, dtype=np.float32)
+        resampy.resample(_warmup_input, 48000, 16000)
+        logger.info("编译器预热成功。")
+    except Exception as e:
+        logger.error(f"预热音频重采样编译器失败: {e}")
+        # 这里不抛出异常，因为即使预热失败，程序仍可能工作，尽管首次处理会延迟。
+
     # Recorder 现在不需要任何参数，它会自动检测采样率
     recorder = Recorder()
     yield

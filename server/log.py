@@ -57,10 +57,26 @@ def init_log():
                 "level": "WARNING",
                 "propagate": False,
             },
+            # 为您自己的应用程序代码（例如 app.py, vad/engine.py）设置一个 logger
+            "app": {
+                "handlers": ["console", "file"],
+                "level": "DEBUG",
+                "propagate": False,
+            },
+            "vad": {
+                "handlers": ["console", "file"],
+                "level": "DEBUG",
+                "propagate": False,
+            },
+             "stt": {
+                "handlers": ["console", "file"],
+                "level": "DEBUG",
+                "propagate": False,
+            },
         },
         "root": {
             "handlers": ["console", "file"],
-            "level": "DEBUG",
+            "level": "INFO", # 将 root logger 的默认级别提高到 INFO
         },
     }
 
