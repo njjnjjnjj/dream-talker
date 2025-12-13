@@ -1,8 +1,6 @@
 import logging
 import asyncio
 import sounddevice as sd
-import resampy
-import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -11,14 +9,12 @@ class Recorder:
     """
     录音机类，负责从麦克风捕获音频并将其放入异步队列中。
     """
-    def __init__(self, samplerate=None, channels=1, dtype="int16", target_samplerate=16000):
+    def __init__(self, samplerate=None, channels=1, dtype="int16"):
         """初始化录音机。"""
         if samplerate is None:
             self.samplerate = self.get_default_samplerate()
         else:
-            self.samplerate = samplerate  # 录音设备采样率
-        
-        self.target_samplerate = target_samplerate # 目标采样率 (VAD 服务期望的采样率)
+            self.samplerate = samplerate  # 采样率
         self.channels = channels      # 声道数
         self.dtype = dtype            # 数据类型
         self.q = asyncio.Queue()      # 用于在回调和主异步循环之间传递音频数据的异步队列
@@ -37,14 +33,7 @@ class Recorder:
         
         try:
             # 使用从主线程获取的事件循环，确保线程安全
-            # 如果需要重采样，则进行转换
-            if self.samplerate != self.target_samplerate:
-                # indata 是 float32 类型的 numpy 数组，resampy 期望 float32
-                resampled_data = resampy.resample(indata, self.samplerate, self.target_samplerate)
-                # 将重采样后的 float32 数据转换回 int16，并放入队列
-                self.loop.call_soon_threadsafe(self.q.put_nowait, (resampled_data * 32767).astype(np.int16))
-            else:
-                self.loop.call_soon_threadsafe(self.q.put_nowait, indata.copy())
+            self.loop.call_soon_threadsafe(self.q.put_nowait, indata.copy())
         except RuntimeError:
             # 如果事件循环已经关闭，这可能会发生。
             pass
