@@ -261,22 +261,26 @@ const tagDistributionOptions = computed(() => ({
     <div class="flex flex-col gap-6 w-full max-w-6xl mx-auto">
         
         <!-- Range Selector -->
-        <div class="flex flex-wrap items-center justify-between gap-4 bg-slate-800 p-4 rounded-xl border border-slate-700 shadow-sm">
-            <div class="flex gap-2">
+        <div class="flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-800 p-4 rounded-xl border border-slate-700 shadow-sm">
+            <div class="flex gap-2 flex-wrap">
                 <button @click="setRange('7days')" :class="`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${rangeType === '7days' ? 'bg-indigo-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`">
-                    Last 7 Days
+                    {{ t.stats.last7DaysShort }}
                 </button>
                 <button @click="setRange('30days')" :class="`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${rangeType === '30days' ? 'bg-indigo-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`">
-                    Last 30 Days
+                    {{ t.stats.last30DaysShort }}
                 </button>
                 <button @click="setRange('month')" :class="`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${rangeType === 'month' ? 'bg-indigo-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`">
-                    This Month
+                    {{ t.stats.thisMonth }}
                 </button>
             </div>
             <div class="flex items-center gap-2">
-                <input type="date" v-model="customStart" @change="handleCustomDateChange" class="bg-slate-900 border border-slate-700 rounded-md px-2 py-1 text-sm text-slate-300 focus:outline-none focus:border-indigo-500">
+                <input type="date" v-model="customStart" @change="handleCustomDateChange"
+                       :class="`bg-slate-900 border ${rangeType === 'custom' ? 'border-indigo-500' : 'border-slate-700'} rounded-md px-3 py-1.5 text-sm text-slate-300
+                               focus:outline-none focus:ring-1 focus:ring-indigo-500 appearance-none date-input`">
                 <span class="text-slate-500">-</span>
-                <input type="date" v-model="customEnd" @change="handleCustomDateChange" class="bg-slate-900 border border-slate-700 rounded-md px-2 py-1 text-sm text-slate-300 focus:outline-none focus:border-indigo-500">
+                <input type="date" v-model="customEnd" @change="handleCustomDateChange"
+                       :class="`bg-slate-900 border ${rangeType === 'custom' ? 'border-indigo-500' : 'border-slate-700'} rounded-md px-3 py-1.5 text-sm text-slate-300
+                               focus:outline-none focus:ring-1 focus:ring-indigo-500 appearance-none date-input`">
             </div>
         </div>
 
@@ -443,5 +447,23 @@ const tagDistributionOptions = computed(() => ({
 .chart {
     height: 100%;
     width: 100%;
+}
+/* Hide default date input icon and add custom styling */
+.date-input::-webkit-calendar-picker-indicator {
+    background: none;
+    display: none;
+}
+.date-input {
+    position: relative;
+    padding-right: 2.5rem; /* Space for custom icon */
+}
+.date-input::after {
+    content: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="%2394a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-calendar"><rect width="18" height="18" x="3" y="4" rx="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>');
+    position: absolute;
+    right: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+    line-height: 1;
 }
 </style>

@@ -51,6 +51,9 @@ export const translations = {
       loudestDay: 'Most Active Day',
       axisCount: 'Events',
       axisDuration: 'Avg Secs',
+      last7DaysShort: '7 Days', // New
+      last30DaysShort: '30 Days', // New
+      thisMonth: 'This Month', // New
     },
     date: {
       tonight: 'Tonight / Last Night',
@@ -108,6 +111,9 @@ export const translations = {
       loudestDay: '最活跃日',
       axisCount: '次数',
       axisDuration: '平均秒数',
+      last7DaysShort: '近7天', // New
+      last30DaysShort: '近30天', // New
+      thisMonth: '本月', // New
     },
     date: {
       tonight: '今晚 / 昨晚',
