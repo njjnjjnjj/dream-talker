@@ -73,8 +73,9 @@ class WebsocketManager:
                         
                         # 检查是否需要重采样
                         if recorder.device_samplerate != target_samplerate:
-                            # 先将 int16 转换为 float32，因为 resampy 需要 float 类型
-                            audio_data_float32 = audio_data_int16.astype(np.float32) / 32768.0
+                            # sounddevice 默认提供 (n_frames, 1) 的 2D 数组，resampy 需要 1D 数组。
+                            # 先将其压平为 1D 数组，然后转换类型。
+                            audio_data_float32 = audio_data_int16.flatten().astype(np.float32) / 32768.0
                             
                             # 执行重采样
                             resampled_data_float32 = resampy.resample(
