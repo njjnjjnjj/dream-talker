@@ -4,10 +4,13 @@ from typing import Callable, Coroutine
 import logging
 from silero_vad import VADIterator, load_silero_vad
 import os
+import io
+import tempfile
 from datetime import datetime
 import wave
 from stt import STTEngine
 from schemas import SleepRecordCreate
+from storage import StorageBackend
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +26,7 @@ class VadWrapper:
         model,
         on_speech_end: Callable[[SleepRecordCreate], Coroutine],
         stt_engine: STTEngine,
+        storage_backend: StorageBackend,
         sample_rate: int = 16000,
         chunk_samples: int = 512,
         speech_pad_ms: int = 250,
@@ -36,10 +40,7 @@ class VadWrapper:
         self.SPEECH_PAD_MS = speech_pad_ms
         self.THRESHOLD = threshold
 
-        # 用于存储音频数据
-        self.DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "records")
-        if not os.path.exists(self.DATA_DIR):
-            os.makedirs(self.DATA_DIR)
+        self.storage = storage_backend
 
         # 当检测到语音片段结束时调用的异步回调函数
         self._on_speech_end = on_speech_end
@@ -66,32 +67,34 @@ class VadWrapper:
         # 标记当前是否处于说话状态
         self._is_speaking = False
 
-    def _save_audio(self, audio_bytes: bytes) -> tuple[str, str] | tuple[None, None]:
+    def _create_wav_bytes(self, audio_bytes: bytes) -> bytes:
+        """将 PCM 数据封装为 WAV 格式的 bytes。"""
+        buffer = io.BytesIO()
+        with wave.open(buffer, "wb") as wf:
+            wf.setnchannels(1)  # 单声道
+            wf.setsampwidth(2)  # 16-bit
+            wf.setframerate(self.SAMPLE_RATE)
+            wf.writeframes(audio_bytes)
+        return buffer.getvalue()
+
+    def _save_audio(self, audio_bytes: bytes) -> str | None:
         """
-        将音频数据保存为 WAV 文件。
-        文件会保存在以当天日期 (YYYY-MM-DD) 命名的子目录中。
-        :return: 成功则返回 (完整文件路径, 相对路径)，失败则返回 (None, None)。
+        将音频数据保存到存储后端。
+        :return: 成功则返回文件标识符 (如相对路径或 Object Key)，失败返回 None。
         """
         today_str = datetime.now().strftime("%Y-%m-%d")
-        date_dir = os.path.join(self.DATA_DIR, today_str)
-        if not os.path.exists(date_dir):
-            os.makedirs(date_dir)
-
         filename = datetime.now().strftime("%Y%m%d_%H%M%S_%f") + ".wav"
-        filepath = os.path.join(date_dir, filename)
-        relative_path = os.path.join(today_str, filename)
+        # 统一使用 "日期/文件名" 的结构作为 key
+        relative_path = f"{today_str}/{filename}"
 
         try:
-            with wave.open(filepath, "wb") as wf:
-                wf.setnchannels(1)  # 单声道
-                wf.setsampwidth(2)  # 16-bit
-                wf.setframerate(self.SAMPLE_RATE)
-                wf.writeframes(audio_bytes)
-            logger.info(f"语音片段已保存至: {filepath}")
-            return filepath, relative_path
+            wav_data = self._create_wav_bytes(audio_bytes)
+            saved_path = self.storage.save(wav_data, relative_path)
+            logger.info(f"语音片段已保存至存储后端: {saved_path}")
+            return saved_path
         except Exception:
             logger.error("保存音频文件失败", exc_info=True)
-            return None, None
+            return None
 
     async def process(self, audio_bytes: bytes):
         """
@@ -131,10 +134,19 @@ class VadWrapper:
                                 f"检测到语音结束，片段大小: {len(self._speech_buffer)} 字节。"
                             )
                             speech_data = bytes(self._speech_buffer)
-                            full_wav_path, relative_wav_path = self._save_audio(speech_data)
+                            saved_path = self._save_audio(speech_data)
 
-                            if full_wav_path and self.stt_engine:
-                                transcript = await self.stt_engine.transcribe(full_wav_path)
+                            if saved_path and self.stt_engine:
+                                # STT 需要一个本地文件路径。即使我们使用 MinIO，
+                                # 也创建一个临时文件供 STT 引擎读取，处理完后自动删除。
+                                with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as temp_wav:
+                                    wav_data = self._create_wav_bytes(speech_data)
+                                    temp_wav.write(wav_data)
+                                    temp_wav.flush()
+                                    
+                                    # 调用 STT 引擎
+                                    transcript = await self.stt_engine.transcribe(temp_wav.name)
+                                
                                 logger.info(f"STT 识别结果: {transcript}")
                                 if transcript:
                                     # 16-bit PCM = 2 bytes per sample
@@ -142,7 +154,7 @@ class VadWrapper:
                                     record_data = SleepRecordCreate(
                                         timestamp=datetime.utcnow().isoformat(),
                                         duration=round(duration_seconds, 2),
-                                        audio_url=relative_wav_path,  # 使用相对路径
+                                        audio_url=saved_path,  # 这里存储的是 StorageBackend 返回的路径/Key
                                         transcription=transcript,
                                         confidence=0.9, # FIXME: 临时写死
                                         tags=[]  # 标签可以后续通过分析 transcription 生成
@@ -179,16 +191,21 @@ class VadEngine:
         logger.info("Silero VAD 模型加载成功。")
 
     def get_vad_wrapper(
-        self, on_speech_end: Callable[[SleepRecordCreate], Coroutine], stt_engine: STTEngine
+        self,
+        on_speech_end: Callable[[SleepRecordCreate], Coroutine],
+        stt_engine: STTEngine,
+        storage_backend: StorageBackend
     ):
         """
         为每个客户端连接创建一个新的 VadWrapper 实例。
         :param on_speech_end: 语音片段结束时的回调函数
         :param stt_engine: STT 引擎实例
+        :param storage_backend: 存储后端实例
         """
         return VadWrapper(
             self.model,
             on_speech_end,
             stt_engine=stt_engine,
+            storage_backend=storage_backend,
             **self.vad_config,
         )

@@ -3,7 +3,7 @@ import logging
 import uvicorn
 import yaml
 import os
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from datetime import date
 from typing import List, Dict
 from pydantic import BaseModel # 导入 BaseModel 用于请求体
@@ -14,6 +14,7 @@ from stt import get_stt_engine, STTEngine
 from database import init_db, add_record
 from schemas import MonthlyActivity, SleepRecordCreate, SleepRecord
 from records import get_records_by_date, get_audio_file_by_id, get_monthly_record_activity, update_record_favorite_status
+from storage import get_storage_backend, StorageBackend
 
 init_log()
 logger = logging.getLogger(__name__)
@@ -29,20 +30,26 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-# 全局 VAD 和 STT 引擎实例
+# 全局 VAD, STT 和 Storage 实例
 vad_engine: VadEngine = None
 stt_engine: STTEngine = None
+storage_backend: StorageBackend = None
 
 
 async def startup_event():
     """在应用启动时加载 VAD 和 STT 模型。"""
-    global vad_engine, stt_engine
+    global vad_engine, stt_engine, storage_backend
     config_path = os.path.join(os.path.dirname(__file__), '.config.yaml')
     config = {}
     if os.path.exists(config_path):
         with open(config_path, 'r', encoding='utf-8') as f:
             config = yaml.safe_load(f)
     
+    # 初始化存储后端
+    storage_config = config.get('storage', {})
+    storage_backend = get_storage_backend(storage_config)
+    logger.info(f"存储后端已初始化: {storage_config.get('type', 'local')}")
+
     # 初始化 VAD 引擎
     vad_config = config.get('vad', {})
     vad_engine = VadEngine(vad_config=vad_config)
@@ -64,7 +71,7 @@ async def websocket_binary(websocket: WebSocket):
         add_record(record_data)
 
     # 为当前 WebSocket 连接创建一个 VadWrapper 实例
-    vad_wrapper = vad_engine.get_vad_wrapper(on_speech_end, stt_engine)
+    vad_wrapper = vad_engine.get_vad_wrapper(on_speech_end, stt_engine, storage_backend)
 
     try:
         # 持续接收来自客户端的音频数据
@@ -117,7 +124,7 @@ async def stream_audio_file(record_id: str):
     """
     以文件流形式提供音频文件。
     """
-    return get_audio_file_by_id(record_id)
+    return get_audio_file_by_id(record_id, storage_backend)
 
 
 if __name__ == "__main__":

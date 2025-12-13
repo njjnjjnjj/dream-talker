@@ -8,3 +8,12 @@ stt:
   type: "funasr"  # 指定要使用的 STT 引擎类型。可选值: "dummy", "funasr"
   # whisper: # 示例：未来 Whisper 引擎的配置
   #   model_path: "path/to/your/whisper/model"
+
+storage:
+  type: "minio" # 可选值: "local", "minio"
+  minio:
+    endpoint: "192.168.31.180:9000"
+    access_key: "njj"
+    secret_key: "Nijiajun@1108"
+    bucket_name: "dream-talker"
+    secure: false

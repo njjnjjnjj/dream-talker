@@ -1,9 +1,10 @@
 import os
 from fastapi import HTTPException
-from starlette.responses import FileResponse
+from starlette.responses import FileResponse, StreamingResponse
 from datetime import date, datetime
 from database import get_db_connection
 from schemas import SleepRecord
+from storage import StorageBackend, LocalStorage
 
 RECORDS_BASE_DIR = os.path.join(os.path.dirname(__file__), "data", "records")
 
@@ -47,7 +48,7 @@ def get_records_by_date(target_date: date) -> list[SleepRecord]:
 
     return records
 
-def get_audio_file_by_id(record_id: str) -> FileResponse:
+def get_audio_file_by_id(record_id: str, storage: StorageBackend) -> StreamingResponse | FileResponse:
     """
     根据记录 ID 从数据库获取音频文件流。
     """
@@ -63,15 +64,22 @@ def get_audio_file_by_id(record_id: str) -> FileResponse:
     if record is None:
         raise HTTPException(status_code=404, detail="Record not found")
 
-    # audio_url is a relative path, we need to join it with the base dir
-    file_path = os.path.join(RECORDS_BASE_DIR, record['audio_url'])
+    file_path_key = record['audio_url']
     
-    print(f"Serving audio file from path: {file_path}")
+    # 如果是本地存储，并且确实是本地文件，我们可以使用高效的 FileResponse
+    # 但为了统一接口，如果 StorageBackend 提供了本地路径，我们可以优化
+    if isinstance(storage, LocalStorage):
+        full_path = os.path.join(storage.base_dir, file_path_key)
+        if not os.path.exists(full_path):
+             raise HTTPException(status_code=404, detail="Audio file not found")
+        return FileResponse(full_path, media_type="audio/wav")
 
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="Audio file not found")
+    # 对于 MinIO 或其他后端，使用流式响应
+    stream = storage.get_stream(file_path_key)
+    if stream is None:
+        raise HTTPException(status_code=404, detail="Audio file not found in storage")
 
-    return FileResponse(file_path, media_type="audio/wav")
+    return StreamingResponse(stream, media_type="audio/wav")
 
 from schemas import SleepRecord, MonthlyActivity, DailyActivitySummary
 
