@@ -76,10 +76,10 @@ async def websocket_binary(websocket: WebSocket):
         # 当客户端断开连接时，重置 VAD 状态
         vad_wrapper.reset()
         logger.info("WebSocket 连接已断开。")
-    except Exception as e:
+    except Exception:
         # 发生其他异常时，同样重置 VAD 状态
         vad_wrapper.reset()
-        logger.error(f"WebSocket 发生错误: {e}")
+        logger.error("WebSocket 发生错误", exc_info=True)
 
 
 @app.get("/api/records", response_model=List[SleepRecord])

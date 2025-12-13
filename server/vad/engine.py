@@ -89,8 +89,8 @@ class VadWrapper:
                 wf.writeframes(audio_bytes)
             logger.info(f"语音片段已保存至: {filepath}")
             return filepath, relative_path
-        except Exception as e:
-            logger.error(f"保存音频文件失败: {e}")
+        except Exception:
+            logger.error("保存音频文件失败", exc_info=True)
             return None, None
 
     async def process(self, audio_bytes: bytes):
@@ -98,60 +98,64 @@ class VadWrapper:
         处理从客户端流式传输过来的音频数据块。
         :param audio_bytes: 从 WebSocket 接收到的原始音频字节
         """
-        self._incoming_buffer.extend(audio_bytes)
+        try:
+            self._incoming_buffer.extend(audio_bytes)
 
-        while len(self._incoming_buffer) >= self.CHUNK_BYTES:
-            chunk = self._incoming_buffer[: self.CHUNK_BYTES]
-            del self._incoming_buffer[: self.CHUNK_BYTES]
+            while len(self._incoming_buffer) >= self.CHUNK_BYTES:
+                chunk = self._incoming_buffer[: self.CHUNK_BYTES]
+                del self._incoming_buffer[: self.CHUNK_BYTES]
 
-            self._history_buffer.extend(chunk)
-            if len(self._history_buffer) > self._history_buffer_max_size:
-                start = len(self._history_buffer) - self._history_buffer_max_size
-                self._history_buffer = self._history_buffer[start:]
+                self._history_buffer.extend(chunk)
+                if len(self._history_buffer) > self._history_buffer_max_size:
+                    start = len(self._history_buffer) - self._history_buffer_max_size
+                    self._history_buffer = self._history_buffer[start:]
 
-            audio_tensor = (
-                torch.from_numpy(np.frombuffer(chunk, dtype=np.int16)).float() / 32768.0
-            )
-            speech_dict = self.vad_iterator(audio_tensor)
+                audio_tensor = (
+                    torch.from_numpy(np.frombuffer(chunk, dtype=np.int16)).float() / 32768.0
+                )
+                speech_dict = self.vad_iterator(audio_tensor)
 
-            if speech_dict:
-                if "start" in speech_dict:
-                    if not self._is_speaking:
-                        logger.debug("检测到语音开始")
-                        self._is_speaking = True
-                        self._speech_buffer.extend(self._history_buffer)
-                        self._history_buffer.clear()
+                if speech_dict:
+                    if "start" in speech_dict:
+                        if not self._is_speaking:
+                            logger.debug("检测到语音开始")
+                            self._is_speaking = True
+                            self._speech_buffer.extend(self._history_buffer)
+                            self._history_buffer.clear()
 
-                if "end" in speech_dict:
-                    if self._is_speaking:
-                        self._is_speaking = False
-                        self._speech_buffer.extend(chunk)
-                        logger.debug(
-                            f"检测到语音结束，片段大小: {len(self._speech_buffer)} 字节。"
-                        )
-                        speech_data = bytes(self._speech_buffer)
-                        full_wav_path, relative_wav_path = self._save_audio(speech_data)
+                    if "end" in speech_dict:
+                        if self._is_speaking:
+                            self._is_speaking = False
+                            self._speech_buffer.extend(chunk)
+                            logger.debug(
+                                f"检测到语音结束，片段大小: {len(self._speech_buffer)} 字节。"
+                            )
+                            speech_data = bytes(self._speech_buffer)
+                            full_wav_path, relative_wav_path = self._save_audio(speech_data)
 
-                        if full_wav_path and self.stt_engine:
-                            transcript = await self.stt_engine.transcribe(full_wav_path)
-                            logger.info(f"STT 识别结果: {transcript}")
-                            if transcript:
-                                # 16-bit PCM = 2 bytes per sample
-                                duration_seconds = len(speech_data) / (self.SAMPLE_RATE * 2)
-                                record_data = SleepRecordCreate(
-                                    timestamp=datetime.utcnow().isoformat(),
-                                    duration=round(duration_seconds, 2),
-                                    audio_url=relative_wav_path,  # 使用相对路径
-                                    transcription=transcript,
-                                    confidence=0.9, # FIXME: 临时写死
-                                    tags=[]  # 标签可以后续通过分析 transcription 生成
-                                )
-                                await self._on_speech_end(record_data)
-                        self._speech_buffer.clear()
-                        self.vad_iterator.reset_states()
+                            if full_wav_path and self.stt_engine:
+                                transcript = await self.stt_engine.transcribe(full_wav_path)
+                                logger.info(f"STT 识别结果: {transcript}")
+                                if transcript:
+                                    # 16-bit PCM = 2 bytes per sample
+                                    duration_seconds = len(speech_data) / (self.SAMPLE_RATE * 2)
+                                    record_data = SleepRecordCreate(
+                                        timestamp=datetime.utcnow().isoformat(),
+                                        duration=round(duration_seconds, 2),
+                                        audio_url=relative_wav_path,  # 使用相对路径
+                                        transcription=transcript,
+                                        confidence=0.9, # FIXME: 临时写死
+                                        tags=[]  # 标签可以后续通过分析 transcription 生成
+                                    )
+                                    await self._on_speech_end(record_data)
+                            self._speech_buffer.clear()
+                            self.vad_iterator.reset_states()
 
-            if self._is_speaking:
-                self._speech_buffer.extend(chunk)
+                if self._is_speaking:
+                    self._speech_buffer.extend(chunk)
+        except Exception:
+            logger.error("处理音频流时发生意外错误", exc_info=True)
+            self.reset()
 
     def reset(self):
         """为新的音频流重置 VAD 状态，清空所有缓冲区。"""

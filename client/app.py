@@ -97,6 +97,14 @@ class WebsocketManager:
                     except asyncio.CancelledError:
                         # 当任务被取消时，退出循环
                         break
+                    except Exception:
+                        logger.error("音频发送循环发生错误", exc_info=True)
+                        # 这里可以选择是否断开连接，或者尝试继续
+                        # 为了稳健性，如果只是偶尔的错误，也许可以继续，
+                        # 但如果连接已断开，ws.send 会抛出异常，此时应该退出
+                        if ws.closed:
+                             logger.warning("WebSocket 连接已关闭，停止发送任务。")
+                             break
                 # 任务结束时，停止录音并关闭 WebSocket 连接
                 recorder.stop()
                 await ws.close()
@@ -105,7 +113,7 @@ class WebsocketManager:
             self._task = asyncio.create_task(sender(websocket))
             logger.info(f"已连接到 VAD 服务器: {server_url}")
         except Exception as e:
-            logger.error(f"连接 VAD 服务器失败: {e}")
+            logger.error(f"连接 VAD 服务器失败: {e}", exc_info=True)
             self.is_connected = False
 
     async def disconnect(self):

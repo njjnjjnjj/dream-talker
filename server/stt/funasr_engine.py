@@ -1,4 +1,5 @@
 import logging
+import asyncio
 from .base import STTEngine
 from funasr import AutoModel
 from funasr.utils.postprocess_utils import rich_transcription_postprocess
@@ -26,14 +27,20 @@ class FunasrEngine(STTEngine):
         )
 
     async def transcribe(self, wav_file_path: str) -> str:
-        res = self.model.generate(
-            input=wav_file_path,
-            cache={},
-            language="auto",  # "zn", "en", "yue", "ja", "ko", "nospeech"
-            use_itn=True,
-            batch_size_s=60,
-            merge_vad=True,  #
-            merge_length_s=15,
-        )
-        text = rich_transcription_postprocess(res[0]["text"])
-        return text
+        try:
+            # 将阻塞的同步模型推理放入线程池中运行，避免阻塞事件循环
+            res = await asyncio.to_thread(
+                self.model.generate,
+                input=wav_file_path,
+                cache={},
+                language="auto",  # "zn", "en", "yue", "ja", "ko", "nospeech"
+                use_itn=True,
+                batch_size_s=60,
+                merge_vad=True,
+                merge_length_s=15,
+            )
+            text = rich_transcription_postprocess(res[0]["text"])
+            return text
+        except Exception:
+            logger.error(f"语音识别失败: {wav_file_path}", exc_info=True)
+            return ""
