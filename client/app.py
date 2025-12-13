@@ -79,11 +79,13 @@ class WebsocketManager:
                             # 先将其压平为 1D 数组，然后转换类型。
                             audio_data_float32 = audio_data_int16.flatten().astype(np.float32) / 32768.0
                             
-                            # 执行重采样
+                            # 执行重采样，并明确指定使用 'kaiser_fast' 滤波器
+                            # 这是性能最高的选项，适用于实时性要求高的场景
                             resampled_data_float32 = resampy.resample(
                                 audio_data_float32,
                                 sr_orig=recorder.device_samplerate,
-                                sr_new=target_samplerate
+                                sr_new=target_samplerate,
+                                filter='kaiser_fast'
                             )
                             
                             # 将重采样后的 float32 转回 int16 以便发送
