@@ -33,11 +33,47 @@ interface StatisticsPanelProps {
 }
 
 const props = defineProps<StatisticsPanelProps>();
+const emit = defineEmits(['range-change']);
 const { t, language } = useLanguage();
 
 const totalEvents = computed(() => props.dailyStats.reduce((acc, curr) => acc + curr.count, 0));
 const avgDuration = computed(() => Math.round(props.dailyStats.reduce((acc, curr) => acc + curr.avgDuration, 0) / (props.dailyStats.length || 1)));
 const maxDay = computed(() => props.dailyStats.length === 0 ? { date: '-', count: 0, avgDuration: 0 } : props.dailyStats.reduce((prev, current) => (prev.count > current.count) ? prev : current));
+const peakHour = computed(() => {
+    if (props.hourlyStats.length === 0) return '-';
+    const max = props.hourlyStats.reduce((prev, curr) => prev.count > curr.count ? prev : curr);
+    return max.count > 0 ? max.hour : '-';
+});
+
+const rangeType = ref('7days');
+const customStart = ref('');
+const customEnd = ref('');
+
+const setRange = (type: string) => {
+    rangeType.value = type;
+    const end = new Date();
+    let start = new Date();
+    
+    if (type === '7days') {
+        start.setDate(end.getDate() - 6);
+    } else if (type === '30days') {
+        start.setDate(end.getDate() - 29);
+    } else if (type === 'month') {
+        start.setDate(1);
+    }
+    
+    emit('range-change', { startDate: start, endDate: end });
+};
+
+const handleCustomDateChange = () => {
+    if (customStart.value && customEnd.value) {
+        rangeType.value = 'custom';
+        emit('range-change', {
+            startDate: new Date(customStart.value),
+            endDate: new Date(customEnd.value)
+        });
+    }
+};
 
 const COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#8b5cf6'];
 
@@ -223,6 +259,26 @@ const tagDistributionOptions = computed(() => ({
 
 <template>
     <div class="flex flex-col gap-6 w-full max-w-6xl mx-auto">
+        
+        <!-- Range Selector -->
+        <div class="flex flex-wrap items-center justify-between gap-4 bg-slate-800 p-4 rounded-xl border border-slate-700 shadow-sm">
+            <div class="flex gap-2">
+                <button @click="setRange('7days')" :class="`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${rangeType === '7days' ? 'bg-indigo-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`">
+                    Last 7 Days
+                </button>
+                <button @click="setRange('30days')" :class="`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${rangeType === '30days' ? 'bg-indigo-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`">
+                    Last 30 Days
+                </button>
+                <button @click="setRange('month')" :class="`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${rangeType === 'month' ? 'bg-indigo-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`">
+                    This Month
+                </button>
+            </div>
+            <div class="flex items-center gap-2">
+                <input type="date" v-model="customStart" @change="handleCustomDateChange" class="bg-slate-900 border border-slate-700 rounded-md px-2 py-1 text-sm text-slate-300 focus:outline-none focus:border-indigo-500">
+                <span class="text-slate-500">-</span>
+                <input type="date" v-model="customEnd" @change="handleCustomDateChange" class="bg-slate-900 border border-slate-700 rounded-md px-2 py-1 text-sm text-slate-300 focus:outline-none focus:border-indigo-500">
+            </div>
+        </div>
 
         <!-- 1. Header Summary Cards -->
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -279,7 +335,7 @@ const tagDistributionOptions = computed(() => ({
                     </svg>
                     <span class="text-xs uppercase font-semibold tracking-wider">{{ t.stats.peakHour }}</span>
                 </div>
-                <div class="text-3xl font-bold text-white">03:00</div>
+                <div class="text-3xl font-bold text-white">{{ peakHour }}</div>
             </div>
         </div>
 

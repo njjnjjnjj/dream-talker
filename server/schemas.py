@@ -36,3 +36,37 @@ class DailyActivitySummary:
 class MonthlyActivity:
     """用于从数据库返回每月活动记录数量的数据类"""
     activity: Dict[str, DailyActivitySummary] = field(default_factory=dict)
+
+@dataclass
+class DailyStat:
+    """每日统计数据"""
+    date: str
+    count: int
+    avgDuration: float
+
+@dataclass
+class HourlyStat:
+    """每小时统计数据"""
+    hour: str
+    count: int
+
+@dataclass
+class TagStat:
+    """标签统计数据"""
+    name: str
+    value: int
+
+@dataclass
+class KeywordStat:
+    """关键词统计数据"""
+    text: str
+    value: int
+    category: str
+
+@dataclass
+class StatisticsResponse:
+    """统计接口响应"""
+    dailyStats: List[DailyStat]
+    hourlyStats: List[HourlyStat]
+    tagStats: List[TagStat]
+    keywordData: List[KeywordStat]

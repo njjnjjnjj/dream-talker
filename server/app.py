@@ -4,16 +4,16 @@ import uvicorn
 import yaml
 import os
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
-from datetime import date
-from typing import List, Dict
+from datetime import date, timedelta
+from typing import List, Dict, Optional
 from pydantic import BaseModel # 导入 BaseModel 用于请求体
 
 from log import init_log
 from vad.engine import VadEngine
 from stt import get_stt_engine, STTEngine
 from database import init_db, add_record
-from schemas import MonthlyActivity, SleepRecordCreate, SleepRecord
-from records import get_records_by_date, get_audio_file_by_id, get_monthly_record_activity, update_record_favorite_status
+from schemas import MonthlyActivity, SleepRecordCreate, SleepRecord, StatisticsResponse
+from records import get_records_by_date, get_audio_file_by_id, get_monthly_record_activity, update_record_favorite_status, get_statistics
 from storage import get_storage_backend, StorageBackend
 
 init_log()
@@ -103,6 +103,18 @@ async def read_record_activity(year: int, month: int):
     获取指定月份每日的梦话记录数量。
     """
     return get_monthly_record_activity(year, month)
+
+
+@app.get("/api/statistics", response_model=StatisticsResponse)
+async def read_statistics(start_date: Optional[date] = None, end_date: Optional[date] = None, days: Optional[int] = None):
+    """
+    获取统计数据。
+    """
+    if days is not None and start_date is None and end_date is None:
+        end_date = date.today()
+        start_date = end_date - timedelta(days=days-1)
+        
+    return get_statistics(start_date, end_date)
 
 
 class UpdateFavoriteRequest(BaseModel):

@@ -44,3 +44,10 @@ export interface MonthlyActivity {
     [dateStr: string]: DailyActivitySummary; // "YYYY-MM-DD": DailyActivitySummary
   };
 }
+
+export interface StatisticsResponse {
+  dailyStats: DailyStats[];
+  hourlyStats: HourlyStat[];
+  tagStats: TagStat[];
+  keywordData: KeywordStat[];
+}

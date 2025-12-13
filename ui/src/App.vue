@@ -7,45 +7,40 @@ import DateSelector from './components/DateSelector.vue';
 import RecordCard from './components/RecordCard.vue';
 import StatisticsPanel from './components/StatisticsPanel.vue';
 import SearchBar from './components/SearchBar.vue';
-import { getKeywordStats, getWeeklyStats, getHourlyStats, getTagStats } from './services/mockData';
 
 const { t, language, setLanguage } = useLanguage();
-const { records, isLoading, error, fetchRecordsByDate, getAudioUrl } = useRecordsApi();
+const { records, isLoading, error, fetchRecordsByDate, getAudioUrl, statistics, fetchStatistics } = useRecordsApi();
 
 
 const selectedDate = ref<Date>(new Date());
 const activeTab = ref<'daily' | 'stats'>('daily');
 
-// Stats Data State
-const keywordData = ref<KeywordStat[]>([]);
-const dailyStats = ref<DailyStats[]>([]);
-const hourlyStats = ref<HourlyStat[]>([]);
-const tagStats = ref<TagStat[]>([]);
+// Stats Data State (Computed from API response)
+const keywordData = computed(() => statistics.value?.keywordData || []);
+const dailyStats = computed(() => statistics.value?.dailyStats || []);
+const hourlyStats = computed(() => statistics.value?.hourlyStats || []);
+const tagStats = computed(() => statistics.value?.tagStats || []);
 
 // Search and Filter State
 const searchTerm = ref('');
 const showFavoritesOnly = ref(false);
 
-// Load data on date or language change
+// Load data on date change
 watch(selectedDate, (newDate) => {
   fetchRecordsByDate(newDate);
   searchTerm.value = ''; // Reset search on date change
 }, { immediate: true });
 
-// Load static stats data
-onMounted(() => {
-  keywordData.value = getKeywordStats(language.value);
-  dailyStats.value = getWeeklyStats(language.value);
-  hourlyStats.value = getHourlyStats();
-  tagStats.value = getTagStats(language.value);
+// Fetch stats when tab changes
+watch(activeTab, (newTab) => {
+  if (newTab === 'stats') {
+    fetchStatistics(); // Fetch with default range on first load
+  }
 });
 
-watch(language, () => {
-  keywordData.value = getKeywordStats(language.value);
-  dailyStats.value = getWeeklyStats(language.value);
-  hourlyStats.value = getHourlyStats();
-  tagStats.value = getTagStats(language.value);
-});
+const handleStatsRangeChange = (range: { startDate: Date; endDate: Date }) => {
+  fetchStatistics({ startDate: range.startDate, endDate: range.endDate });
+};
 
 const toggleLanguage = () => {
   setLanguage(language.value === 'en' ? 'zh' : 'en');
@@ -67,7 +62,7 @@ const filteredRecords = computed(() => {
 const getRecordWithAudioUrl = (record: SleepRecord) => {
   return {
     ...record,
-    audioUrl: getAudioUrl(record.audio_path),
+    audioUrl: getAudioUrl(record.audio_url),
   };
 };
 
@@ -174,11 +169,12 @@ const getRecordWithAudioUrl = (record: SleepRecord) => {
       </div>
 
       <div v-if="activeTab === 'stats'" class="animate-in slide-in-from-bottom-4 duration-500">
-        <StatisticsPanel 
-          :daily-stats="dailyStats" 
+        <StatisticsPanel
+          :daily-stats="dailyStats"
           :hourly-stats="hourlyStats"
           :tag-stats="tagStats"
           :keyword-data="keywordData"
+          @range-change="handleStatsRangeChange"
         />
       </div>
 

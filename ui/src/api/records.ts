@@ -1,11 +1,12 @@
 import { ref } from 'vue';
-import type { SleepRecord, MonthlyActivity } from '../types';
+import type { SleepRecord, MonthlyActivity, StatisticsResponse } from '../types';
 
 const API_BASE_URL = '/api';
 
 export function useRecordsApi() {
   const records = ref<SleepRecord[]>([]);
   const monthlyActivity = ref<MonthlyActivity | null>(null);
+  const statistics = ref<StatisticsResponse | null>(null);
   const isLoading = ref(false);
   const error = ref<string | null>(null);
 
@@ -96,14 +97,47 @@ export function useRecordsApi() {
     }
   };
 
+  /**
+   * Fetches statistics data.
+   * @param params - Query parameters (days or startDate+endDate)
+   */
+  const fetchStatistics = async (params: { days?: number; startDate?: Date; endDate?: Date } = { days: 7 }) => {
+    isLoading.value = true;
+    error.value = null;
+    try {
+      let query = '';
+      if (params.startDate && params.endDate) {
+          const start = params.startDate.toISOString().split('T')[0];
+          const end = params.endDate.toISOString().split('T')[0];
+          query = `start_date=${start}&end_date=${end}`;
+      } else if (params.days) {
+          query = `days=${params.days}`;
+      } else {
+          query = `days=7`;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/statistics?${query}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch statistics');
+      }
+      statistics.value = await response.json();
+    } catch (err: any) {
+      error.value = err.message || 'An unknown error occurred';
+    } finally {
+      isLoading.value = false;
+    }
+  };
+
   return {
     records,
     monthlyActivity,
+    statistics,
     isLoading,
     error,
     fetchRecordsByDate,
     getAudioUrl,
     fetchMonthlyActivity,
     updateRecordFavoriteStatus,
+    fetchStatistics,
   };
 }

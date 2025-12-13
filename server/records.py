@@ -23,7 +23,7 @@ def get_records_by_date(target_date: date) -> list[SleepRecord]:
                 LEFT JOIN tags t ON rt.tag_id = t.id
                 WHERE r.timestamp LIKE ?
                 GROUP BY r.id
-                ORDER BY r.timestamp DESC
+                ORDER BY r.is_favorite DESC, r.timestamp DESC
             """
             cursor.execute(query, (f"{target_date.strftime('%Y-%m-%d')}%",))
             
@@ -81,7 +81,101 @@ def get_audio_file_by_id(record_id: str, storage: StorageBackend) -> StreamingRe
 
     return StreamingResponse(stream, media_type="audio/wav")
 
-from schemas import SleepRecord, MonthlyActivity, DailyActivitySummary
+from schemas import SleepRecord, MonthlyActivity, DailyActivitySummary, StatisticsResponse, DailyStat, HourlyStat, TagStat, KeywordStat
+
+def get_statistics(start_date: date = None, end_date: date = None) -> StatisticsResponse:
+    """
+    获取指定日期范围内的统计数据。
+    """
+    daily_stats = []
+    hourly_stats = []
+    tag_stats = []
+    
+    # 默认最近 7 天
+    if end_date is None:
+        end_date = date.today()
+    if start_date is None:
+        start_date = end_date - timedelta(days=6)
+
+    start_str = start_date.strftime('%Y-%m-%d')
+    end_str = end_date.strftime('%Y-%m-%d')
+    # 为了包含 end_date 的全天，我们需要比较日期部分
+    
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            
+            # 1. Daily Stats
+            query_daily = """
+                SELECT
+                    strftime('%Y-%m-%d', timestamp) as record_date,
+                    COUNT(id) as count,
+                    AVG(duration) as avg_duration
+                FROM records
+                WHERE strftime('%Y-%m-%d', timestamp) BETWEEN ? AND ?
+                GROUP BY record_date
+                ORDER BY record_date ASC
+            """
+            cursor.execute(query_daily, (start_str, end_str))
+            for row in cursor.fetchall():
+                daily_stats.append(DailyStat(
+                    date=row['record_date'],
+                    count=row['count'],
+                    avgDuration=round(row['avg_duration'], 1)
+                ))
+                
+            # 2. Hourly Stats
+            query_hourly = """
+                SELECT
+                    strftime('%H', timestamp) as hour_str,
+                    COUNT(id) as count
+                FROM records
+                WHERE strftime('%Y-%m-%d', timestamp) BETWEEN ? AND ?
+                GROUP BY hour_str
+                ORDER BY hour_str ASC
+            """
+            cursor.execute(query_hourly, (start_str, end_str))
+            
+            hourly_map = {f"{h:02d}": 0 for h in range(24)}
+            for row in cursor.fetchall():
+                hourly_map[row['hour_str']] = row['count']
+            
+            for h in sorted(hourly_map.keys()):
+                hourly_stats.append(HourlyStat(
+                    hour=f"{h}:00",
+                    count=hourly_map[h]
+                ))
+            
+            # 3. Tag Stats
+            query_tags = """
+                SELECT
+                    t.name,
+                    COUNT(rt.record_id) as value
+                FROM tags t
+                JOIN record_tags rt ON t.id = rt.tag_id
+                JOIN records r ON rt.record_id = r.id
+                WHERE strftime('%Y-%m-%d', r.timestamp) BETWEEN ? AND ?
+                GROUP BY t.name
+                ORDER BY value DESC
+            """
+            cursor.execute(query_tags, (start_str, end_str))
+            for row in cursor.fetchall():
+                tag_stats.append(TagStat(
+                    name=row['name'],
+                    value=row['value']
+                ))
+
+    except Exception as e:
+        print(f"Error fetching statistics: {e}")
+        # Return empty on error or raise?
+        raise HTTPException(status_code=500, detail="Could not fetch statistics")
+
+    return StatisticsResponse(
+        dailyStats=daily_stats,
+        hourlyStats=hourly_stats,
+        tagStats=tag_stats,
+        keywordData=[] # 暂时不实现 Keyword Heatmap
+    )
 
 def get_monthly_record_activity(year: int, month: int) -> MonthlyActivity:
     """

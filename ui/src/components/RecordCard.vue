@@ -61,11 +61,27 @@ onMounted(() => {
     isAudioLoaded.value = false;
   };
 
+  const onPlayStart = () => {
+      // Pause all other audio elements when this one starts playing
+      document.querySelectorAll('audio').forEach((el) => {
+          if (el !== player && !el.paused) {
+              el.pause();
+          }
+      });
+      isPlaying.value = true;
+  };
+
+  const onPause = () => {
+      isPlaying.value = false;
+  };
+
   player.addEventListener('timeupdate', updateCurrentTime);
   player.addEventListener('loadedmetadata', setDuration);
   player.addEventListener('ended', onPlayEnd);
   player.addEventListener('canplay', onCanPlay);
   player.addEventListener('error', onError);
+  player.addEventListener('play', onPlayStart);
+  player.addEventListener('pause', onPause);
 
   onUnmounted(() => {
     player.removeEventListener('timeupdate', updateCurrentTime);
@@ -73,6 +89,8 @@ onMounted(() => {
     player.removeEventListener('ended', onPlayEnd);
     player.removeEventListener('canplay', onCanPlay);
     player.removeEventListener('error', onError);
+    player.removeEventListener('play', onPlayStart);
+    player.removeEventListener('pause', onPause);
   });
 });
 
@@ -89,7 +107,7 @@ const togglePlay = () => {
     }
     player.play();
   }
-  isPlaying.value = !isPlaying.value;
+  // isPlaying.value state is updated via 'play' and 'pause' event listeners
 };
 
 const handleSeek = (event: MouseEvent) => {
@@ -137,7 +155,13 @@ const timeString = computed(() => new Date(props.record.timestamp).toLocaleTimeS
 </script>
 
 <template>
-  <div class="bg-slate-800 rounded-xl p-5 border border-slate-700/50 hover:border-slate-600 transition-all shadow-md group">
+  <div
+    :class="`bg-slate-800 rounded-xl p-5 border transition-all shadow-md group ${
+      record.is_favorite
+        ? 'border-amber-500/30 hover:border-amber-500/50 shadow-amber-900/10'
+        : 'border-slate-700/50 hover:border-slate-600'
+    }`"
+  >
     <audio
       ref="audioPlayer"
       :src="`/api/audio/${record.id}`"
