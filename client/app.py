@@ -141,13 +141,22 @@ class WebsocketManager:
                                 
                         except asyncio.CancelledError:
                             raise # 允许任务被取消
+                        except websockets.exceptions.ConnectionClosed:
+                            logger.warning("WebSocket 连接已关闭")
+                            raise # 重新抛出，触发外层捕获
                         except Exception as e:
                             logger.error("音频发送循环发生错误", exc_info=True)
-                            # 如果 WebSocket 已关闭，抛出异常以触发重连
-                            if websocket.closed:
-                                raise ConnectionError("WebSocket closed") from e
-                            # 其他错误（如重采样失败），可能不需要断开连接，视情况而定
-                            # 暂时继续
+                            # 如果是 websockets 相关的其它错误，或者我们就认为是连接问题
+                            # 我们可以尝试访问 protocol.state，但为了安全起见，
+                            # 如果发送失败，我们假设连接可能不稳定，抛出异常触发重连往往是更安全的选择。
+                            # 或者，我们只针对特定异常重连。
+                            
+                            # 这里做一个简单的检查：如果异常消息包含 connection closed 相关字眼
+                            if "closed" in str(e).lower() or isinstance(e, (ConnectionError, BrokenPipeError)):
+                                 raise ConnectionError("Connection issue detected") from e
+                            
+                            # 对于其他错误（如数据处理错误），我们可能希望继续尝试发送下一帧，
+                            # 除非错误持续发生。但为了避免死循环报错，这里可以选择不抛出，继续循环。
                             
                 finally:
                     # 确保退出循环时停止录音
