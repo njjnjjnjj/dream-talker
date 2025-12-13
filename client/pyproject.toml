@@ -8,6 +8,7 @@ dependencies = [
     "fastapi>=0.124.2",
     "numpy>=2.3.5",
     "pyaml>=25.7.0",
+    "resampy>=0.4.2", # 添加 resampy 依赖
     "sounddevice>=0.5.3",
     "uvicorn>=0.38.0",
     "websockets>=15.0.1",
