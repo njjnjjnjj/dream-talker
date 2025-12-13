@@ -4,6 +4,8 @@ import uvicorn
 import websockets
 import yaml
 import os
+import numpy as np
+import resampy
 from fastapi import FastAPI, HTTPException
 from contextlib import asynccontextmanager
 
@@ -61,12 +63,35 @@ class WebsocketManager:
             async def sender(ws):
                 """
                 这是一个后台任务，它从录音机的队列中获取音频数据，
-                并通过 WebSocket 发送到服务器。
+                在必要时进行重采样，然后通过 WebSocket 发送到服务器。
                 """
+                target_samplerate = config.get("recorder", {}).get("target_samplerate", 16000)
+                
                 while self.is_connected:
                     try:
-                        audio_data = await recorder.q.get()
-                        await ws.send(audio_data.tobytes())
+                        audio_data_int16 = await recorder.q.get() # 这是 numpy 数组
+                        
+                        # 检查是否需要重采样
+                        if recorder.device_samplerate != target_samplerate:
+                            # 先将 int16 转换为 float32，因为 resampy 需要 float 类型
+                            audio_data_float32 = audio_data_int16.astype(np.float32) / 32768.0
+                            
+                            # 执行重采样
+                            resampled_data_float32 = resampy.resample(
+                                audio_data_float32,
+                                sr_orig=recorder.device_samplerate,
+                                sr_new=target_samplerate
+                            )
+                            
+                            # 将重采样后的 float32 转回 int16 以便发送
+                            resampled_data_int16 = (resampled_data_float32 * 32768.0).astype(np.int16)
+                            
+                            # 发送重采样后的数据
+                            await ws.send(resampled_data_int16.tobytes())
+                        else:
+                            # 如果采样率相同，直接发送
+                            await ws.send(audio_data_int16.tobytes())
+                            
                     except asyncio.CancelledError:
                         # 当任务被取消时，退出循环
                         break
@@ -104,9 +129,8 @@ async def lifespan(app: FastAPI):
     """FastAPI 的生命周期事件，在应用启动时初始化录音机。"""
     global recorder
     load_config() # 在应用启动时加载配置
-    recorder_config = config.get("recorder", {})
-    # 只需要传递 samplerate，其他参数在 Recorder 内部处理
-    recorder = Recorder(samplerate=recorder_config.get("samplerate", 16000))
+    # Recorder 现在不需要任何参数，它会自动检测采样率
+    recorder = Recorder()
     yield
     # 在应用关闭时，确保断开 WebSocket 连接
     if websocket_manager.is_connected:
