@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, computed, onMounted } from 'vue';
 import { useLanguage } from '../composables/useLanguage';
-import { getMonthlyActivity } from '../services/mockData';
+import { useRecordsApi } from '../api/records';
 import { type MonthlyActivity } from '../types';
 
 interface CalendarWidgetProps {
@@ -13,7 +13,8 @@ const emit = defineEmits(['selectDate']);
 
 const { t, language } = useLanguage();
 const currentMonth = ref(new Date(props.selectedDate));
-const activityData = ref<MonthlyActivity>({});
+const { fetchMonthlyActivity, monthlyActivity } = useRecordsApi();
+const activityData = ref<MonthlyActivity>({ activity: {} });
 
 // Reset to selected date's month when opened or changed externally
 onMounted(() => {
@@ -21,11 +22,13 @@ onMounted(() => {
 });
 
 // Fetch mock data when month changes
-watch(currentMonth, () => {
-  const year = currentMonth.value.getFullYear();
-  const month = currentMonth.value.getMonth();
-  const data = getMonthlyActivity(year, month);
-  activityData.value = data;
+watch(currentMonth, async (newMonth) => {
+  const year = newMonth.getFullYear();
+  const month = newMonth.getMonth() + 1; // getMonth() returns 0-11
+  await fetchMonthlyActivity(year, month);
+  if (monthlyActivity.value) {
+    activityData.value = monthlyActivity.value;
+  }
 }, { immediate: true });
 
 const handlePrevMonth = () => {
@@ -119,14 +122,14 @@ const isToday = (day: number) => {
       >
         <span :class="`text-sm ${isSelected(day) ? 'font-bold' : ''}`">{{ day }}</span>
         
-        <div v-if="(activityData[`${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`] || 0) > 0" class="flex items-center justify-center mt-0.5">
+        <div v-if="(activityData.activity[`${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`] || 0) > 0" class="flex items-center justify-center mt-0.5">
            <!-- Badge for count -->
            <span :class="`text-[10px] px-1.5 rounded-full font-medium ${
              isSelected(day)
                ? 'bg-white/20 text-white'
                : 'bg-indigo-500/20 text-indigo-400'
            }`">
-             {{ activityData[`${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`] || 0 }}
+             {{ activityData.activity[`${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`] || 0 }}
            </span>
         </div>
       </button>

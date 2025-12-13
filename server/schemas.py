@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Dict
 
 @dataclass
 class SleepRecordCreate:
@@ -22,3 +22,9 @@ class SleepRecord:
     transcription: str
     confidence: float = 0.0
     tags: List[str] = field(default_factory=list)
+
+
+@dataclass
+class MonthlyActivity:
+    """用于从数据库返回每月活动记录数量的数据类"""
+    activity: Dict[str, int] = field(default_factory=dict)

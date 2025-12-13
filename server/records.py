@@ -71,3 +71,32 @@ def get_audio_file_by_id(record_id: str) -> FileResponse:
         raise HTTPException(status_code=404, detail="Audio file not found")
 
     return FileResponse(file_path, media_type="audio/wav")
+
+from schemas import SleepRecord, MonthlyActivity
+
+def get_monthly_record_activity(year: int, month: int) -> MonthlyActivity:
+    """
+    获取指定月份每日的梦话记录数量。
+    """
+    activity_data: Dict[str, int] = {}
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            query = """
+                SELECT
+                    strftime('%Y-%m-%d', timestamp) as record_date,
+                    COUNT(id) as record_count
+                FROM records
+                WHERE strftime('%Y', timestamp) = ? AND strftime('%m', timestamp) = ?
+                GROUP BY record_date
+            """
+            month_str = str(month).zfill(2)
+            cursor.execute(query, (str(year), month_str))
+            
+            for row in cursor.fetchall():
+                activity_data[row['record_date']] = row['record_count']
+    except Exception as e:
+        print(f"Error fetching monthly activity: {e}")
+        raise HTTPException(status_code=500, detail="Could not fetch monthly activity")
+
+    return MonthlyActivity(activity=activity_data)

@@ -5,14 +5,14 @@ import yaml
 import os
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from datetime import date
-from typing import List
+from typing import List, Dict
 
 from log import init_log
 from vad.engine import VadEngine
 from stt import get_stt_engine, STTEngine
 from database import init_db, add_record
-from schemas import SleepRecordCreate, SleepRecord
-from records import get_records_by_date, get_audio_file_by_id
+from schemas import MonthlyActivity, SleepRecordCreate, SleepRecord
+from records import get_records_by_date, get_audio_file_by_id, get_monthly_record_activity
 
 init_log()
 logger = logging.getLogger(__name__)
@@ -87,6 +87,14 @@ async def read_records_by_date(date: date):
     获取指定日期的梦话记录。
     """
     return get_records_by_date(date)
+
+
+@app.get("/api/records/activity", response_model=MonthlyActivity)
+async def read_record_activity(year: int, month: int):
+    """
+    获取指定月份每日的梦话记录数量。
+    """
+    return get_monthly_record_activity(year, month)
 
 
 @app.get("/api/audio/{record_id}")

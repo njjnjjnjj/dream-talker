@@ -35,5 +35,7 @@ export interface TagStat {
 }
 
 export interface MonthlyActivity {
-  [dateStr: string]: number; // "YYYY-MM-DD": count
+  activity: {
+    [dateStr: string]: number; // "YYYY-MM-DD": count
+  };
 }

@@ -1,10 +1,11 @@
 import { ref } from 'vue';
-import type { SleepRecord } from '../types';
+import type { SleepRecord, MonthlyActivity } from '../types';
 
 const API_BASE_URL = '/api';
 
 export function useRecordsApi() {
   const records = ref<SleepRecord[]>([]);
+  const monthlyActivity = ref<MonthlyActivity | null>(null);
   const isLoading = ref(false);
   const error = ref<string | null>(null);
 
@@ -28,7 +29,7 @@ export function useRecordsApi() {
       isLoading.value = false;
     }
   };
-  
+
   /**
    * Constructs the full URL for an audio file.
    * @param audioPath - The relative path of the audio file
@@ -46,12 +47,35 @@ export function useRecordsApi() {
     return `${API_BASE_URL}/audio/${parts.join('/')}`;
   };
 
+  /**
+   * Fetches monthly activity data (record counts per day).
+   * @param year - The year to fetch activity for
+   * @param month - The month (1-12) to fetch activity for
+   */
+  const fetchMonthlyActivity = async (year: number, month: number) => {
+    isLoading.value = true;
+    error.value = null;
+    try {
+      const response = await fetch(`${API_BASE_URL}/records/activity?year=${year}&month=${month}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch monthly activity');
+      }
+      const data = await response.json();
+      monthlyActivity.value = data;
+    } catch (err: any) {
+      error.value = err.message || 'An unknown error occurred';
+    } finally {
+      isLoading.value = false;
+    }
+  };
 
   return {
     records,
+    monthlyActivity,
     isLoading,
     error,
     fetchRecordsByDate,
     getAudioUrl,
+    fetchMonthlyActivity,
   };
 }
