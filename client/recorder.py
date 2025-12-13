@@ -9,12 +9,9 @@ class Recorder:
     """
     录音机类，负责从麦克风捕获音频并将其放入异步队列中。
     """
-    def __init__(self, samplerate=None, channels=1, dtype="int16"):
+    def __init__(self, samplerate=16000, channels=1, dtype="int16"):
         """初始化录音机。"""
-        if samplerate is None:
-            self.samplerate = self.get_default_samplerate()
-        else:
-            self.samplerate = samplerate  # 采样率
+        self.samplerate = samplerate  # 采样率
         self.channels = channels      # 声道数
         self.dtype = dtype            # 数据类型
         self.q = asyncio.Queue()      # 用于在回调和主异步循环之间传递音频数据的异步队列
@@ -84,15 +81,3 @@ class Recorder:
             self.stream = None
         self.is_recording = False
         logger.info("音频流已停止。")
-
-    @staticmethod
-    def get_default_samplerate():
-        """获取默认输入设备的采样率"""
-        try:
-            default_device = sd.query_default_input()
-            device_info = sd.query_devices(default_device, 'input')
-            logger.info(f"检测到默认输入设备: {device_info['name']}, 默认采样率: {int(device_info['default_samplerate'])}")
-            return int(device_info['default_samplerate'])
-        except Exception as e:
-            logger.warning(f"无法获取默认采样率，使用默认值 16000: {e}")
-            return 16000 # 回退到默认值

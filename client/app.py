@@ -104,14 +104,7 @@ async def lifespan(app: FastAPI):
     """FastAPI 的生命周期事件，在应用启动时初始化录音机。"""
     global recorder
     load_config() # 在应用启动时加载配置
-
-    # 获取采样率，优先从配置中读取
-    samplerate = config.get("samplerate")
-    
-    if samplerate:
-        recorder = Recorder(samplerate=samplerate)
-    else:
-        recorder = Recorder()
+    recorder = Recorder()
     yield
     # 在应用关闭时，确保断开 WebSocket 连接
     if websocket_manager.is_connected:
