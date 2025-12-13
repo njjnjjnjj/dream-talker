@@ -15,6 +15,8 @@ const emit = defineEmits(['updateRecord']);
 const { t, language } = useLanguage();
 const { updateRecordFavoriteStatus } = useRecordsApi();
 const isPlaying = ref(false);
+const isAudioLoaded = ref(false); // Track audio loading state
+const isAudioError = ref(false); // Track audio error state
 const currentTime = ref(0);
 const audioPlayer = ref<HTMLAudioElement | null>(null);
 const duration = ref(props.record.duration);
@@ -49,18 +51,33 @@ onMounted(() => {
     player.currentTime = 0;
   };
 
+  const onCanPlay = () => {
+    isAudioLoaded.value = true;
+    isAudioError.value = false;
+  };
+
+  const onError = () => {
+    isAudioError.value = true;
+    isAudioLoaded.value = false;
+  };
+
   player.addEventListener('timeupdate', updateCurrentTime);
   player.addEventListener('loadedmetadata', setDuration);
   player.addEventListener('ended', onPlayEnd);
+  player.addEventListener('canplay', onCanPlay);
+  player.addEventListener('error', onError);
 
   onUnmounted(() => {
     player.removeEventListener('timeupdate', updateCurrentTime);
     player.removeEventListener('loadedmetadata', setDuration);
     player.removeEventListener('ended', onPlayEnd);
+    player.removeEventListener('canplay', onCanPlay);
+    player.removeEventListener('error', onError);
   });
 });
 
 const togglePlay = () => {
+  if (!isAudioLoaded.value || isAudioError.value) return;
   const player = audioPlayer.value;
   if (!player) return;
 
@@ -165,15 +182,31 @@ const timeString = computed(() => new Date(props.record.timestamp).toLocaleTimeS
     <!-- Audio Player Container -->
     <div class="bg-slate-900/50 rounded-lg p-3 mb-4 border border-slate-700/50 flex items-center gap-4">
         <!-- Play/Pause Button -->
-        <button 
+        <button
            @click="togglePlay"
+           :disabled="!isAudioLoaded || isAudioError"
            :class="`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all ${
-             isPlaying 
-             ? 'bg-indigo-500 text-white shadow-[0_0_10px_rgba(99,102,241,0.4)]' 
-             : 'bg-slate-700 text-slate-300 hover:bg-slate-600 hover:text-white'
+             isAudioError
+             ? 'bg-red-500/10 text-red-500 cursor-not-allowed border border-red-500/20'
+             : !isAudioLoaded
+               ? 'bg-slate-800 text-slate-500 cursor-not-allowed opacity-50'
+               : isPlaying
+                 ? 'bg-indigo-500 text-white shadow-[0_0_10px_rgba(99,102,241,0.4)]'
+                 : 'bg-slate-700 text-slate-300 hover:bg-slate-600 hover:text-white'
            }`"
         >
-          <template v-if="isPlaying">
+          <template v-if="isAudioError">
+             <!-- Alert Triangle size={18} -->
+             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-alert-triangle"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>
+          </template>
+          <template v-else-if="!isAudioLoaded">
+             <!-- Loading Spinner -->
+             <svg class="animate-spin h-5 w-5 text-slate-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+             </svg>
+          </template>
+          <template v-else-if="isPlaying">
             <!-- Pause size={18} fill="currentColor" -->
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-pause"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
           </template>

@@ -242,6 +242,7 @@ class MinioStorage(StorageBackend):
                 if self._minio_down:
                     self._minio_down = False
                     logger.info("MinIO recovered during save operation.")
+                    # save 结尾本身就会调用 _trigger_sync，所以这里不用显式调用，但为了逻辑清晰可以保留或依靠下面的调用
                     
                 break
             except Exception as e:
@@ -274,28 +275,81 @@ class MinioStorage(StorageBackend):
 
     def get_stream(self, file_path: str):
         """
-        获取文件流，优先 MinIO，失败则尝试本地。
+        获取文件流。
+        如果标记为 MinIO 宕机，则优先尝试本地存储，以提高响应速度。
         """
-        # 尝试 MinIO
-        try:
-            response = self.client.get_object(self.bucket_name, file_path)
-            return response
-        except Exception as e:
-            logger.warning(f"Failed to get object from MinIO ({e}), trying LocalStorage: {file_path}")
-            
-            # 回退尝试本地存储
+        # 内部函数：尝试从本地获取
+        def try_local():
             if self.local_backup.exists(file_path):
                 return self.local_backup.get_stream(file_path)
-            
-            logger.error(f"File not found in both MinIO and LocalStorage: {file_path}")
             return None
+
+        # 内部函数：尝试从 MinIO 获取
+        def try_minio():
+            try:
+                response = self.client.get_object(self.bucket_name, file_path)
+                # 如果成功获取，且之前标记为宕机，说明恢复了
+                if self._minio_down:
+                    self._minio_down = False
+                    logger.info("MinIO recovered during read operation.")
+                    self._trigger_sync() # 立即触发同步
+                return response
+            except Exception as e:
+                # 记录失败
+                logger.warning(f"Failed to get object from MinIO: {e}")
+                # 如果是连接超时等错误，标记为宕机，避免后续请求再次等待超时
+                if "Max retries exceeded" in str(e) or "Connection refused" in str(e) or "timeout" in str(e).lower():
+                    if not self._minio_down:
+                        self._minio_down = True
+                        logger.error("MinIO marked as down due to read failure.")
+                return None
+
+        # 如果 MinIO 被标记为宕机，优先读取本地
+        if self._minio_down:
+            stream = try_local()
+            if stream:
+                return stream
+            # 本地没有，尝试 MinIO (可能是历史文件，或者 MinIO 已恢复但尚未发生写入)
+            logger.info(f"File {file_path} not found locally, trying MinIO despite down flag.")
+            return try_minio()
+        
+        # 正常状态：优先尝试 MinIO
+        stream = try_minio()
+        if stream:
+            return stream
+        
+        # MinIO 失败（可能刚刚挂了），尝试本地 fallback
+        logger.warning(f"MinIO read failed, falling back to LocalStorage for: {file_path}")
+        return try_local()
     
     def exists(self, file_path: str) -> bool:
+        # 同样的逻辑：如果宕机，先查本地
+        if self._minio_down:
+            if self.local_backup.exists(file_path):
+                return True
+            # 本地没有，查 MinIO (尝试探测是否恢复)
+            try:
+                self.client.stat_object(self.bucket_name, file_path)
+                if self._minio_down:
+                    self._minio_down = False
+                    logger.info("MinIO recovered during exists check.")
+                    self._trigger_sync() # 立即触发同步
+                return True
+            except Exception:
+                return False
+
+        # 正常逻辑
         try:
             self.client.stat_object(self.bucket_name, file_path)
             return True
-        except Exception:
-            # 检查本地备份
+        except Exception as e:
+            # 如果是连接超时等错误，标记为宕机
+            if "Max retries exceeded" in str(e) or "Connection refused" in str(e) or "timeout" in str(e).lower():
+                if not self._minio_down:
+                    self._minio_down = True
+                    logger.error("MinIO marked as down due to exists check failure.")
+            
+            # MinIO 失败，查本地
             return self.local_backup.exists(file_path)
 
 def get_storage_backend(config: dict) -> StorageBackend:
