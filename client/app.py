@@ -70,9 +70,11 @@ class WebsocketManager:
                 while self.is_connected:
                     try:
                         audio_data_int16 = await recorder.q.get() # 这是 numpy 数组
-                        
+                        logger.debug(f"从队列中获取到音频数据，大小: {audio_data_int16.nbytes} 字节")
+
                         # 检查是否需要重采样
                         if recorder.device_samplerate != target_samplerate:
+                            logger.debug(f"需要重采样: 从 {recorder.device_samplerate} Hz -> {target_samplerate} Hz")
                             # sounddevice 默认提供 (n_frames, 1) 的 2D 数组，resampy 需要 1D 数组。
                             # 先将其压平为 1D 数组，然后转换类型。
                             audio_data_float32 = audio_data_int16.flatten().astype(np.float32) / 32768.0
@@ -85,13 +87,14 @@ class WebsocketManager:
                             )
                             
                             # 将重采样后的 float32 转回 int16 以便发送
-                            resampled_data_int16 = (resampled_data_float32 * 32768.0).astype(np.int16)
-                            
-                            # 发送重采样后的数据
-                            await ws.send(resampled_data_int16.tobytes())
+                            final_audio_data = (resampled_data_float32 * 32768.0).astype(np.int16)
+                            logger.debug(f"重采样完成，新数据大小: {final_audio_data.nbytes} 字节")
                         else:
                             # 如果采样率相同，直接发送
-                            await ws.send(audio_data_int16.tobytes())
+                            final_audio_data = audio_data_int16
+                        
+                        logger.debug(f"准备通过 WebSocket 发送 {final_audio_data.nbytes} 字节的音频数据...")
+                        await ws.send(final_audio_data.tobytes())
                             
                     except asyncio.CancelledError:
                         # 当任务被取消时，退出循环
