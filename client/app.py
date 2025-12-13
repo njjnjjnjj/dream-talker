@@ -34,7 +34,13 @@ class WebsocketManager:
             websocket = await websockets.connect(server_url)
             self.is_connected = True
             # 开始录音
-            recorder.start()
+            try:
+                recorder.start()
+            except Exception as recorder_e:
+                logger.error(f"录音机启动失败: {recorder_e}")
+                self.is_connected = False
+                # 重新抛出异常，以便外部可以捕获并返回适当的 HTTP 响应
+                raise HTTPException(status_code=500, detail=f"录音机启动失败: {recorder_e}")
 
             async def sender(ws):
                 """

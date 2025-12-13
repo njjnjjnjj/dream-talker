@@ -1,7 +1,7 @@
 vad:
   sample_rate: 16000
   chunk_samples: 512
-  speech_pad_ms: 1000  # 梦话场景建议值：容忍更长的停顿
+  speech_pad_ms: 2000  # 梦话场景建议值：容忍更长的停顿
   threshold: 0.4      # 梦话场景建议值：对低音量更敏感
 
 stt:

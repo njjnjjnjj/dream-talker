@@ -42,15 +42,31 @@ class Recorder:
             return
 
         logger.info("正在启动音频流...")
-        self.stream = sd.InputStream(
-            samplerate=self.samplerate,
-            channels=self.channels,
-            dtype=self.dtype,
-            callback=self._callback,
-        )
-        self.stream.start()
-        self.is_recording = True
-        logger.info("音频流已启动。")
+        try:
+            self.stream = sd.InputStream(
+                samplerate=self.samplerate,
+                channels=self.channels,
+                dtype=self.dtype,
+                callback=self._callback,
+            )
+            self.stream.start()
+            self.is_recording = True
+            logger.info("音频流已启动。")
+        except sd.PortAudioError as e:
+            logger.error(f"启动音频流失败: {e}")
+            self.is_recording = False
+            # 尝试获取并记录可用的输入设备信息
+            try:
+                devices = sd.query_devices()
+                input_devices = [d for d in devices if d['max_input_channels'] > 0]
+                logger.error(f"可用的输入设备: {input_devices}")
+            except Exception as device_error:
+                logger.error(f"无法查询设备信息: {device_error}")
+            raise # 重新抛出异常，让上层调用者处理
+        except Exception as e:
+            logger.error(f"启动音频流时发生未知错误: {e}")
+            self.is_recording = False
+            raise
 
     def stop(self):
         """停止录音。"""
