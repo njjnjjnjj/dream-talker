@@ -1,2 +1,4 @@
 # Ignore temporary data files
 data/
+
+uv.lock
