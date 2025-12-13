@@ -34,8 +34,13 @@ export interface TagStat {
   value: number;
 }
 
+export interface DailyActivitySummary {
+  total_records: number;
+  favorite_records: number;
+}
+
 export interface MonthlyActivity {
   activity: {
-    [dateStr: string]: number; // "YYYY-MM-DD": count
+    [dateStr: string]: DailyActivitySummary; // "YYYY-MM-DD": DailyActivitySummary
   };
 }

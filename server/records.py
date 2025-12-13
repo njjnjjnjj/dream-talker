@@ -73,20 +73,21 @@ def get_audio_file_by_id(record_id: str) -> FileResponse:
 
     return FileResponse(file_path, media_type="audio/wav")
 
-from schemas import SleepRecord, MonthlyActivity
+from schemas import SleepRecord, MonthlyActivity, DailyActivitySummary
 
 def get_monthly_record_activity(year: int, month: int) -> MonthlyActivity:
     """
     获取指定月份每日的梦话记录数量。
     """
-    activity_data: Dict[str, int] = {}
+    activity_data: Dict[str, DailyActivitySummary] = {}
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
             query = """
                 SELECT
                     strftime('%Y-%m-%d', timestamp) as record_date,
-                    COUNT(id) as record_count
+                    COUNT(id) as total_records,
+                    SUM(CASE WHEN is_favorite = 1 THEN 1 ELSE 0 END) as favorite_records
                 FROM records
                 WHERE strftime('%Y', timestamp) = ? AND strftime('%m', timestamp) = ?
                 GROUP BY record_date
@@ -95,7 +96,10 @@ def get_monthly_record_activity(year: int, month: int) -> MonthlyActivity:
             cursor.execute(query, (str(year), month_str))
             
             for row in cursor.fetchall():
-                activity_data[row['record_date']] = row['record_count']
+                activity_data[row['record_date']] = DailyActivitySummary(
+                    total_records=row['total_records'],
+                    favorite_records=row['favorite_records']
+                )
     except Exception as e:
         print(f"Error fetching monthly activity: {e}")
         raise HTTPException(status_code=500, detail="Could not fetch monthly activity")

@@ -80,6 +80,12 @@ const isToday = (day: number) => {
          today.getFullYear() === currentMonth.value.getFullYear();
 };
 
+const getDailySummary = (day: number) => {
+  const dateStr = `${currentMonth.value.getFullYear()}-${String(currentMonth.value.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  // 返回 DailyActivitySummary 或一个默认值，以避免 undefined
+  return activityData.value.activity[dateStr] || { total_records: 0, favorite_records: 0 };
+};
+
 </script>
 
 <template>
@@ -114,23 +120,31 @@ const isToday = (day: number) => {
         :key="day"
         @click="handleDateClick(day)"
         :class="`h-10 md:h-12 rounded-lg flex flex-col items-center justify-center relative transition-all border border-transparent
-          ${isSelected(day) 
-            ? 'bg-indigo-600 text-white shadow-lg border-indigo-500' 
+          ${isSelected(day)
+            ? 'bg-indigo-600 text-white shadow-lg border-indigo-500'
             : 'hover:bg-slate-700 text-slate-300 hover:border-slate-600'}
           ${isToday(day) && !isSelected(day) ? 'bg-slate-700/50 text-indigo-300 border-slate-600' : ''}
         `"
       >
         <span :class="`text-sm ${isSelected(day) ? 'font-bold' : ''}`">{{ day }}</span>
         
-        <div v-if="(activityData.activity[`${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`] || 0) > 0" class="flex items-center justify-center mt-0.5">
-           <!-- Badge for count -->
-           <span :class="`text-[10px] px-1.5 rounded-full font-medium ${
-             isSelected(day)
-               ? 'bg-white/20 text-white'
-               : 'bg-indigo-500/20 text-indigo-400'
-           }`">
-             {{ activityData.activity[`${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`] || 0 }}
-           </span>
+        <div class="flex items-center justify-center mt-0.5 gap-1">
+          <span v-if="getDailySummary(day).total_records > 0"
+                :class="`text-[10px] px-1.5 rounded-full font-medium ${
+                  isSelected(day)
+                    ? 'bg-white/20 text-white'
+                    : 'bg-indigo-500/20 text-indigo-400'
+                }`">
+            {{ getDailySummary(day).total_records }}
+          </span>
+          <span v-if="getDailySummary(day).favorite_records > 0"
+                :class="`text-[10px] px-1.5 rounded-full font-medium ${
+                  isSelected(day)
+                    ? 'bg-white/20 text-white'
+                    : 'bg-amber-500/20 text-amber-400' // Yellow color for favorite records
+                }`">
+            ⭐ {{ getDailySummary(day).favorite_records }}
+          </span>
         </div>
       </button>
     </div>
