@@ -2,6 +2,8 @@ import asyncio
 import logging
 import uvicorn
 import websockets
+import yaml
+import os
 from fastapi import FastAPI, HTTPException
 from contextlib import asynccontextmanager
 
@@ -10,6 +12,20 @@ from log import init_log
 
 init_log()
 logger = logging.getLogger(__name__)
+
+# 全局配置变量
+config = {}
+
+def load_config():
+    """加载配置文件"""
+    config_path = os.path.join(os.path.dirname(__file__), ".config.yaml")
+    if os.path.exists(config_path):
+        with open(config_path, 'r', encoding='utf-8') as f:
+            global config
+            config = yaml.safe_load(f)
+        logger.info(f"配置文件已加载: {config}")
+    else:
+        logger.warning(f"配置文件未找到: {config_path}")
 
 class WebsocketManager:
     """
@@ -87,6 +103,7 @@ recorder: Recorder = None
 async def lifespan(app: FastAPI):
     """FastAPI 的生命周期事件，在应用启动时初始化录音机。"""
     global recorder
+    load_config() # 在应用启动时加载配置
     recorder = Recorder()
     yield
     # 在应用关闭时，确保断开 WebSocket 连接
@@ -95,20 +112,24 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-@app.post("/ws/connect")
-async def ws_connect(server_url: str = "ws://127.0.0.1:8569/vad"):
-    """HTTP 端点，用于触发 WebSocket 连接。"""
+@app.post("/record/start")
+async def start_record():
+    """HTTP 端点，用于启动录音和 WebSocket 连接。"""
     if not recorder:
         raise HTTPException(status_code=500, detail="录音机未初始化")
     
-    await websocket_manager.connect(recorder, server_url)
-    return {"status": "正在连接"}
+    server_url = config.get("server_url")
+    if not server_url:
+        raise HTTPException(status_code=500, detail="配置文件中未找到 server_url")
 
-@app.post("/ws/disconnect")
-async def ws_disconnect():
-    """HTTP 端点，用于断开 WebSocket 连接。"""
+    await websocket_manager.connect(recorder, server_url)
+    return {"status": "录音已启动，正在连接"}
+
+@app.post("/record/stop")
+async def stop_record():
+    """HTTP 端点，用于停止录音和断开 WebSocket 连接。"""
     await websocket_manager.disconnect()
-    return {"status": "正在断开"}
+    return {"status": "录音已停止，正在断开"}
 
 if __name__ == "__main__":
     # 客户端运行在不同的端口以避免与服务器冲突
