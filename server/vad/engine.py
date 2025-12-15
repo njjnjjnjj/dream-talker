@@ -8,6 +8,7 @@ import io
 import tempfile
 from datetime import datetime
 import wave
+import pytz # 导入 pytz 库
 from stt import STTEngine
 from schemas import SleepRecordCreate
 from storage import StorageBackend
@@ -82,8 +83,10 @@ class VadWrapper:
         将音频数据保存到存储后端。
         :return: 成功则返回文件标识符 (如相对路径或 Object Key)，失败返回 None。
         """
-        today_str = datetime.now().strftime("%Y-%m-%d")
-        filename = datetime.now().strftime("%Y%m%d_%H%M%S_%f") + ".wav"
+        shanghai_tz = pytz.timezone("Asia/Shanghai")
+        now_shanghai = datetime.now(shanghai_tz)
+        today_str = now_shanghai.strftime("%Y-%m-%d")
+        filename = now_shanghai.strftime("%Y%m%d_%H%M%S_%f") + ".wav"
         # 统一使用 "日期/文件名" 的结构作为 key
         relative_path = f"{today_str}/{filename}"
 
@@ -103,6 +106,9 @@ class VadWrapper:
         """
         try:
             self._incoming_buffer.extend(audio_bytes)
+
+            shanghai_tz = pytz.timezone("Asia/Shanghai")
+            now_shanghai = datetime.now(shanghai_tz)
 
             while len(self._incoming_buffer) >= self.CHUNK_BYTES:
                 chunk = self._incoming_buffer[: self.CHUNK_BYTES]
@@ -152,7 +158,7 @@ class VadWrapper:
                                     # 16-bit PCM = 2 bytes per sample
                                     duration_seconds = len(speech_data) / (self.SAMPLE_RATE * 2)
                                     record_data = SleepRecordCreate(
-                                        timestamp=datetime.utcnow().isoformat(),
+                                        timestamp=now_shanghai.isoformat(), # 使用上海时间
                                         duration=round(duration_seconds, 2),
                                         audio_url=saved_path,  # 这里存储的是 StorageBackend 返回的路径/Key
                                         transcription=transcript,
