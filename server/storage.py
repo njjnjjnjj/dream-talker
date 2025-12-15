@@ -36,13 +36,22 @@ class StorageBackend(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def get_stream(self, file_path: str):
+    def get_stream(self, file_path: str, offset: int = 0, length: int = -1):
         """
         获取文件内容流。
+        :param offset: 开始读取的偏移量
+        :param length: 要读取的长度 (-1 表示读取到末尾)
         :return: 一个可读的文件对象或生成器
         """
         pass
-    
+
+    @abc.abstractmethod
+    def get_size(self, file_path: str) -> int:
+        """
+        获取文件的大小（字节）。
+        """
+        pass
+
     @abc.abstractmethod
     def exists(self, file_path: str) -> bool:
         """
@@ -73,12 +82,26 @@ class LocalStorage(StorageBackend):
         # 对于本地存储，返回相对路径，由 API 负责组装完整路径或提供文件流
         return file_path
 
-    def get_stream(self, file_path: str):
+    def get_stream(self, file_path: str, offset: int = 0, length: int = -1):
         full_path = os.path.join(self.base_dir, file_path)
         if not os.path.exists(full_path):
             return None
-        return open(full_path, "rb")
-    
+        
+        f = open(full_path, "rb")
+        f.seek(offset)
+        
+        # 如果 length 为 -1，则无法直接传递给 read，需要读取剩余全部
+        # 但 StreamingResponse 会处理，这里简单返回文件对象即可
+        # 更好的做法是返回一个生成器，但这会使 FileResponse 无法使用
+        # `get_audio_file_by_id` 中对 LocalStorage 的处理是直接 FileResponse，所以这里保持简单
+        return f
+
+    def get_size(self, file_path: str) -> int:
+        full_path = os.path.join(self.base_dir, file_path)
+        if not os.path.exists(full_path):
+            return -1
+        return os.path.getsize(full_path)
+
     def exists(self, file_path: str) -> bool:
         full_path = os.path.join(self.base_dir, file_path)
         return os.path.exists(full_path)
@@ -274,7 +297,7 @@ class MinioStorage(StorageBackend):
         # 返回文件路径
         return file_path
 
-    def get_stream(self, file_path: str):
+    def get_stream(self, file_path: str, offset: int = 0, length: int = -1):
         """
         获取文件流。
         如果标记为 MinIO 宕机，则优先尝试本地存储，以提高响应速度。
@@ -282,13 +305,16 @@ class MinioStorage(StorageBackend):
         # 内部函数：尝试从本地获取
         def try_local():
             if self.local_backup.exists(file_path):
-                return self.local_backup.get_stream(file_path)
+                return self.local_backup.get_stream(file_path, offset=offset, length=length)
             return None
 
         # 内部函数：尝试从 MinIO 获取
         def try_minio():
             try:
-                response = self.client.get_object(self.bucket_name, file_path)
+                # 如果 length 是默认值 -1，MinIO client 会读取到最后
+                # 如果是其他值，需要确保它不是 0
+                read_length = length if length > 0 else None
+                response = self.client.get_object(self.bucket_name, file_path, offset=offset, length=read_length)
                 # 如果成功获取，且之前标记为宕机，说明恢复了
                 if self._minio_down:
                     self._minio_down = False
@@ -323,6 +349,14 @@ class MinioStorage(StorageBackend):
         logger.warning(f"MinIO read failed, falling back to LocalStorage for: {file_path}")
         return try_local()
     
+    def get_size(self, file_path: str) -> int:
+        try:
+            stat = self.client.stat_object(self.bucket_name, file_path)
+            return stat.size
+        except Exception:
+            # 如果 MinIO 失败，尝试从本地备份获取大小
+            return self.local_backup.get_size(file_path)
+
     def exists(self, file_path: str) -> bool:
         # 同样的逻辑：如果宕机，先查本地
         if self._minio_down:

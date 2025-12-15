@@ -3,7 +3,7 @@ import logging
 import uvicorn
 import yaml
 import os
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request
 from datetime import date, timedelta
 from typing import List, Dict, Optional
 from pydantic import BaseModel # 导入 BaseModel 用于请求体
@@ -132,11 +132,11 @@ async def update_favorite_status(record_id: str, request: UpdateFavoriteRequest)
 
 
 @app.get("/api/audio/{record_id}")
-async def stream_audio_file(record_id: str):
+async def stream_audio_file(record_id: str, request: Request):
     """
     以文件流形式提供音频文件。
     """
-    return get_audio_file_by_id(record_id, storage_backend)
+    return get_audio_file_by_id(record_id, storage_backend, request)
 
 
 if __name__ == "__main__":

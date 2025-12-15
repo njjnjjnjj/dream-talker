@@ -1,6 +1,8 @@
 import os
-from fastapi import HTTPException
+import re
+from fastapi import HTTPException, Request, Response
 from starlette.responses import FileResponse, StreamingResponse
+from typing import Generator
 from datetime import date, datetime
 from database import get_db_connection
 from schemas import SleepRecord
@@ -48,9 +50,9 @@ def get_records_by_date(target_date: date) -> list[SleepRecord]:
 
     return records
 
-def get_audio_file_by_id(record_id: str, storage: StorageBackend) -> StreamingResponse | FileResponse:
+def get_audio_file_by_id(record_id: str, storage: StorageBackend, request: Request) -> Response:
     """
-    根据记录 ID 从数据库获取音频文件流。
+    根据记录 ID 从数据库获取音频文件流，支持 Range 请求。
     """
     try:
         with get_db_connection() as conn:
@@ -65,21 +67,83 @@ def get_audio_file_by_id(record_id: str, storage: StorageBackend) -> StreamingRe
         raise HTTPException(status_code=404, detail="Record not found")
 
     file_path_key = record['audio_url']
-    
-    # 如果是本地存储，并且确实是本地文件，我们可以使用高效的 FileResponse
-    # 但为了统一接口，如果 StorageBackend 提供了本地路径，我们可以优化
+
+    # 如果是本地存储，直接使用 FileResponse，它原生支持 Range 请求
     if isinstance(storage, LocalStorage):
         full_path = os.path.join(storage.base_dir, file_path_key)
         if not os.path.exists(full_path):
-             raise HTTPException(status_code=404, detail="Audio file not found")
-        return FileResponse(full_path, media_type="audio/wav")
+            raise HTTPException(status_code=404, detail="Audio file not found")
+        return FileResponse(full_path, media_type="audio/wav", accept_ranges="bytes")
 
-    # 对于 MinIO 或其他后端，使用流式响应
-    stream = storage.get_stream(file_path_key)
-    if stream is None:
+    # --- 对于 MinIO 等非本地存储，手动实现 Range 请求处理 ---
+    
+    file_size = storage.get_size(file_path_key)
+    if file_size < 0:
         raise HTTPException(status_code=404, detail="Audio file not found in storage")
 
-    return StreamingResponse(stream, media_type="audio/wav")
+    range_header = request.headers.get('range')
+    
+    # 默认响应头
+    headers = {
+        "Content-Type": "audio/wav",
+        "Accept-Ranges": "bytes",
+        "Content-Length": str(file_size),
+        "Connection": "keep-alive",
+    }
+    
+    start, end = 0, file_size - 1
+    status_code = 200
+
+    if range_header:
+        range_match = re.match(r'bytes=(\d+)-(\d*)', range_header)
+        if range_match:
+            start_str, end_str = range_match.groups()
+            start = int(start_str)
+            end = int(end_str) if end_str else file_size - 1
+
+            # 确保范围有效
+            if start >= file_size or end >= file_size or start > end:
+                 raise HTTPException(status_code=416, detail="Requested range not satisfiable")
+
+            # 更新状态码和头部
+            status_code = 206
+            content_length = end - start + 1
+            headers["Content-Length"] = str(content_length)
+            headers["Content-Range"] = f"bytes {start}-{end}/{file_size}"
+    
+    # 定义一个生成器来流式传输数据
+    def stream_generator(offset: int, length: int) -> Generator[bytes, None, None]:
+        stream = None
+        try:
+            stream = storage.get_stream(file_path_key, offset=offset, length=length)
+            if stream is None:
+                # 再次检查，以防万一
+                raise HTTPException(status_code=404, detail="Failed to open audio stream")
+            
+            # MinIO 的 get_object 返回的是一个 urllib3.response.HTTPResponse 对象
+            # 我们可以通过 stream() 方法迭代获取数据块
+            for chunk in stream.stream(32 * 1024): # 32KB per chunk
+                yield chunk
+        finally:
+            if hasattr(stream, 'close'):
+                stream.close()
+
+    # 根据状态码返回响应
+    if status_code == 206:
+        content_length = end - start + 1
+        return StreamingResponse(
+            stream_generator(start, content_length),
+            status_code=status_code,
+            headers=headers,
+            media_type="audio/wav"
+        )
+    else: # 200
+        return StreamingResponse(
+            stream_generator(0, file_size),
+            status_code=status_code,
+            headers=headers,
+            media_type="audio/wav"
+        )
 
 from schemas import SleepRecord, MonthlyActivity, DailyActivitySummary, StatisticsResponse, DailyStat, HourlyStat, TagStat, KeywordStat
 

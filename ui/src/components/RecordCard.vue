@@ -17,6 +17,7 @@ const { updateRecordFavoriteStatus } = useRecordsApi();
 const isPlaying = ref(false);
 const isAudioLoaded = ref(false); // Track audio loading state
 const isAudioError = ref(false); // Track audio error state
+const isLoadingOnDemand = ref(false); // New state for on-demand loading
 const currentTime = ref(0);
 const audioPlayer = ref<HTMLAudioElement | null>(null);
 const duration = ref(props.record.duration);
@@ -67,12 +68,14 @@ onMounted(() => {
   const onCanPlay = () => {
     isAudioLoaded.value = true;
     isAudioError.value = false;
+    isLoadingOnDemand.value = false; // Stop loading indicator
   };
-
-  const onError = () => {
-    isAudioError.value = true;
-    isAudioLoaded.value = false;
-  };
+ 
+   const onError = () => {
+     isAudioError.value = true;
+     isAudioLoaded.value = false;
+     isLoadingOnDemand.value = false; // Stop loading indicator on error
+   };
 
   const onPlayStart = () => {
       // Pause all other audio elements when this one starts playing
@@ -108,9 +111,23 @@ onMounted(() => {
 });
 
 const togglePlay = () => {
-  if (!isAudioLoaded.value || isAudioError.value) return;
   const player = audioPlayer.value;
   if (!player) return;
+
+  // If there's an error, do nothing.
+  if (isAudioError.value) return;
+
+  // On the very first play, set the src and load the audio.
+  if (!player.src) {
+    isLoadingOnDemand.value = true; // Start loading indicator
+    player.src = `/api/audio/${props.record.id}`;
+    player.load();
+    player.play().catch(e => {
+      console.error("Audio playback failed:", e);
+      isAudioError.value = true;
+    });
+    return;
+  }
 
   if (isPlaying.value) {
     player.pause();
@@ -120,7 +137,6 @@ const togglePlay = () => {
     }
     player.play();
   }
-  // isPlaying.value state is updated via 'play' and 'pause' event listeners
 };
 
 const handleSeek = (event: MouseEvent) => {
@@ -177,8 +193,7 @@ const timeString = computed(() => new Date(props.record.timestamp).toLocaleTimeS
   >
     <audio
       ref="audioPlayer"
-      :src="`/api/audio/${record.id}`"
-      preload="metadata"
+      preload="auto"
       class="hidden"
     ></audio>
     
@@ -221,22 +236,22 @@ const timeString = computed(() => new Date(props.record.timestamp).toLocaleTimeS
         <!-- Play/Pause Button -->
         <button
            @click="togglePlay"
-           :disabled="!isAudioLoaded || isAudioError"
+           :disabled="isLoadingOnDemand || isAudioError"
            :class="`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all ${
-             isAudioError
-             ? 'bg-red-500/10 text-red-500 cursor-not-allowed border border-red-500/20'
-             : !isAudioLoaded
-               ? 'bg-slate-800 text-slate-500 cursor-not-allowed opacity-50'
-               : isPlaying
-                 ? 'bg-indigo-500 text-white shadow-[0_0_10px_rgba(99,102,241,0.4)]'
-                 : 'bg-slate-700 text-slate-300 hover:bg-slate-600 hover:text-white'
-           }`"
+              isAudioError
+              ? 'bg-red-500/10 text-red-500 cursor-not-allowed border border-red-500/20'
+              : isLoadingOnDemand
+                ? 'bg-slate-800 text-slate-500 cursor-not-allowed opacity-50'
+                : isPlaying
+                  ? 'bg-indigo-500 text-white shadow-[0_0_10px_rgba(99,102,241,0.4)]'
+                  : 'bg-slate-700 text-slate-300 hover:bg-slate-600 hover:text-white'
+            }`"
         >
           <template v-if="isAudioError">
              <!-- Alert Triangle size={18} -->
              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-alert-triangle"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>
           </template>
-          <template v-else-if="!isAudioLoaded">
+          <template v-else-if="isLoadingOnDemand">
              <!-- Loading Spinner -->
              <svg class="animate-spin h-5 w-5 text-slate-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
