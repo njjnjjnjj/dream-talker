@@ -30,6 +30,7 @@ class VadWrapper:
         sample_rate: int = 16000,
         chunk_samples: int = 512,
         speech_pad_ms: int = 250,
+        speech_prefix_ms: int = 500, # 用于设置语音开始前缀的毫秒数
         threshold: float = 0.5,
     ):
         # VAD 模型相关参数
@@ -57,7 +58,7 @@ class VadWrapper:
         self._incoming_buffer = bytearray()
 
         # 计算历史缓冲区的最大字节数，用于在语音开始时，将填充部分包含进来
-        padding_bytes = self.SPEECH_PAD_MS * (self.SAMPLE_RATE // 1000) * 2
+        padding_bytes = speech_prefix_ms * (self.SAMPLE_RATE // 1000) * 2
         # 历史音频数据缓冲区
         self._history_buffer = bytearray()
         self._history_buffer_max_size = padding_bytes
@@ -161,7 +162,9 @@ class VadWrapper:
                                     )
                                     await self._on_speech_end(record_data)
                             self._speech_buffer.clear()
-                            self.vad_iterator.reset_states()
+                            # HACK: 禁用 reset_states 以允许 silero VAD 在内部管理语音填充。
+                            # 重新启用此功能将导致语音过早终止。
+                            # self.vad_iterator.reset_states()
 
                 if self._is_speaking:
                     self._speech_buffer.extend(chunk)
