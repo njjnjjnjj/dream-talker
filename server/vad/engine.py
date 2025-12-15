@@ -33,6 +33,7 @@ class VadWrapper:
         speech_pad_ms: int = 250,
         speech_prefix_ms: int = 500, # 用于设置语音开始前缀的毫秒数
         threshold: float = 0.5,
+        min_silence_duration_ms: int = 100, # 新增 VAD 参数
     ):
         # VAD 模型相关参数
         self.SAMPLE_RATE = sample_rate
@@ -52,7 +53,8 @@ class VadWrapper:
         self.vad_iterator = VADIterator(
             model,
             threshold=self.THRESHOLD,
-            speech_pad_ms=self.SPEECH_PAD_MS
+            speech_pad_ms=self.SPEECH_PAD_MS,
+            min_silence_duration_ms=min_silence_duration_ms
         )
 
         # 用于暂存从客户端接收到的音频数据

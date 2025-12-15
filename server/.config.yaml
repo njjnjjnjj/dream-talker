@@ -1,7 +1,8 @@
 vad:
   sample_rate: 16000
   chunk_samples: 512
-  speech_pad_ms: 2000  # 梦话场景建议值：容忍更长的停顿
+  speech_pad_ms: 500  # VAD 检测到语音结束后，额外保留的尾部静音时长（毫秒），以防止切掉句尾的词
+  min_silence_duration_ms: 1000 # 定义多长的静音算作一句话的结束（毫秒）
   speech_prefix_ms: 500 # 语音开始前添加的前缀静音时长（毫秒）
   threshold: 0.4      # 梦话场景建议值：对低音量更敏感
 
