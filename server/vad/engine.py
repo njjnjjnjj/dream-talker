@@ -31,6 +31,7 @@ class VadWrapper:
         sample_rate: int = 16000,
         chunk_samples: int = 512,
         speech_pad_ms: int = 250,
+        speech_prefix_ms: int = 500, # 用于设置语音开始前缀的毫秒数
         threshold: float = 0.5,
     ):
         # VAD 模型相关参数
@@ -58,7 +59,7 @@ class VadWrapper:
         self._incoming_buffer = bytearray()
 
         # 计算历史缓冲区的最大字节数，用于在语音开始时，将填充部分包含进来
-        padding_bytes = self.SPEECH_PAD_MS * (self.SAMPLE_RATE // 1000) * 2
+        padding_bytes = speech_prefix_ms * (self.SAMPLE_RATE // 1000) * 2
         # 历史音频数据缓冲区
         self._history_buffer = bytearray()
         self._history_buffer_max_size = padding_bytes
@@ -145,14 +146,28 @@ class VadWrapper:
                             if saved_path and self.stt_engine:
                                 # STT 需要一个本地文件路径。即使我们使用 MinIO，
                                 # 也创建一个临时文件供 STT 引擎读取，处理完后自动删除。
-                                with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as temp_wav:
-                                    wav_data = self._create_wav_bytes(speech_data)
-                                    temp_wav.write(wav_data)
-                                    temp_wav.flush()
+                                # 在 Windows 上，我们需要先关闭文件，然后才能让另一个进程（如 ffmpeg）读取它。
+                                # 因此，我们不能在 'with' 块内调用 transcribe。这种修改方式对 Linux 和 macOS 也是安全的。
+                                transcript = ""
+                                temp_wav_path = None
+                                try:
+                                    # 1. 创建一个临时文件，但不立即删除
+                                    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_f:
+                                        wav_data = self._create_wav_bytes(speech_data)
+                                        temp_f.write(wav_data)
+                                        temp_wav_path = temp_f.name
                                     
-                                    # 调用 STT 引擎
-                                    transcript = await self.stt_engine.transcribe(temp_wav.name)
-                                
+                                    # 2. 文件已关闭，现在路径可以安全地传递给 STT 引擎
+                                    if temp_wav_path:
+                                        transcript = await self.stt_engine.transcribe(temp_wav_path)
+                                finally:
+                                    # 3. 手动删除临时文件
+                                    if temp_wav_path and os.path.exists(temp_wav_path):
+                                        try:
+                                            os.remove(temp_wav_path)
+                                        except OSError as e:
+                                            logger.error(f"删除临时文件失败: {temp_wav_path}", exc_info=e)
+
                                 logger.info(f"STT 识别结果: {transcript}")
                                 if transcript:
                                     # 16-bit PCM = 2 bytes per sample
@@ -167,7 +182,9 @@ class VadWrapper:
                                     )
                                     await self._on_speech_end(record_data)
                             self._speech_buffer.clear()
-                            self.vad_iterator.reset_states()
+                            # HACK: 禁用 reset_states 以允许 silero VAD 在内部管理语音填充。
+                            # 重新启用此功能将导致语音过早终止。
+                            # self.vad_iterator.reset_states()
 
                 if self._is_speaking:
                     self._speech_buffer.extend(chunk)
