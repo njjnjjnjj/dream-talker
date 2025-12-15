@@ -9,7 +9,7 @@ import StatisticsPanel from './components/StatisticsPanel.vue';
 import SearchBar from './components/SearchBar.vue';
 
 const { t, language, setLanguage } = useLanguage();
-const { records, isLoading, error, fetchRecordsByDate, getAudioUrl, statistics, fetchStatistics } = useRecordsApi();
+const { records, isLoading, error, fetchRecordsByDate, getAudioUrl, statistics, fetchStatistics, fetchMonthlyActivity } = useRecordsApi();
 
 
 const selectedDate = ref<Date>(new Date());
@@ -42,6 +42,11 @@ watch(activeTab, (newTab) => {
   if (newTab === 'stats') {
     fetchStatistics(); // Fetch with default range on first load
   }
+});
+
+onMounted(() => {
+  const now = new Date();
+  fetchMonthlyActivity(now.getFullYear(), now.getMonth() + 1);
 });
 
 const handleStatsRangeChange = (range: { startDate: Date; endDate: Date }) => {

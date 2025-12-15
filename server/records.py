@@ -21,11 +21,11 @@ def get_records_by_date(target_date: date) -> list[SleepRecord]:
                 FROM records r
                 LEFT JOIN record_tags rt ON r.id = rt.record_id
                 LEFT JOIN tags t ON rt.tag_id = t.id
-                WHERE r.timestamp LIKE ?
+                WHERE SUBSTR(r.timestamp, 1, 10) = ?
                 GROUP BY r.id
                 ORDER BY r.is_favorite DESC, r.timestamp DESC
             """
-            cursor.execute(query, (f"{target_date.strftime('%Y-%m-%d')}%",))
+            cursor.execute(query, (target_date.strftime('%Y-%m-%d'),))
             
             for row in cursor.fetchall():
                 # 将数据库行转换为 SleepRecord 对象
@@ -108,11 +108,11 @@ def get_statistics(start_date: date = None, end_date: date = None) -> Statistics
             # 1. Daily Stats
             query_daily = """
                 SELECT
-                    strftime('%Y-%m-%d', timestamp) as record_date,
+                    SUBSTR(timestamp, 1, 10) as record_date,
                     COUNT(id) as count,
                     AVG(duration) as avg_duration
                 FROM records
-                WHERE strftime('%Y-%m-%d', timestamp) BETWEEN ? AND ?
+                WHERE SUBSTR(timestamp, 1, 10) BETWEEN ? AND ?
                 GROUP BY record_date
                 ORDER BY record_date ASC
             """
@@ -127,10 +127,10 @@ def get_statistics(start_date: date = None, end_date: date = None) -> Statistics
             # 2. Hourly Stats
             query_hourly = """
                 SELECT
-                    strftime('%H', timestamp) as hour_str,
+                    SUBSTR(timestamp, 12, 2) as hour_str,
                     COUNT(id) as count
                 FROM records
-                WHERE strftime('%Y-%m-%d', timestamp) BETWEEN ? AND ?
+                WHERE SUBSTR(timestamp, 1, 10) BETWEEN ? AND ?
                 GROUP BY hour_str
                 ORDER BY hour_str ASC
             """
@@ -154,7 +154,7 @@ def get_statistics(start_date: date = None, end_date: date = None) -> Statistics
                 FROM tags t
                 JOIN record_tags rt ON t.id = rt.tag_id
                 JOIN records r ON rt.record_id = r.id
-                WHERE strftime('%Y-%m-%d', r.timestamp) BETWEEN ? AND ?
+                WHERE SUBSTR(r.timestamp, 1, 10) BETWEEN ? AND ?
                 GROUP BY t.name
                 ORDER BY value DESC
             """
@@ -187,11 +187,11 @@ def get_monthly_record_activity(year: int, month: int) -> MonthlyActivity:
             cursor = conn.cursor()
             query = """
                 SELECT
-                    strftime('%Y-%m-%d', timestamp) as record_date,
+                    SUBSTR(timestamp, 1, 10) as record_date,
                     COUNT(id) as total_records,
                     SUM(CASE WHEN is_favorite = 1 THEN 1 ELSE 0 END) as favorite_records
                 FROM records
-                WHERE strftime('%Y', timestamp) = ? AND strftime('%m', timestamp) = ?
+                WHERE SUBSTR(timestamp, 1, 4) = ? AND SUBSTR(timestamp, 6, 2) = ?
                 GROUP BY record_date
             """
             month_str = str(month).zfill(2)
@@ -217,7 +217,7 @@ def update_record_favorite_status(record_id: str, is_favorite: bool) -> bool:
             cursor = conn.cursor()
             # SQLite 存储布尔值为 0 或 1
             favorite_value = 1 if is_favorite else 0
-            now = datetime.utcnow().isoformat() # 导入 datetime
+            now = datetime.now().isoformat()
             
             cursor.execute(
                 "UPDATE records SET is_favorite = ?, updated_at = ? WHERE id = ?",
