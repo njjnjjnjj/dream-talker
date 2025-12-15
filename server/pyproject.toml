@@ -9,6 +9,7 @@ dependencies = [
     "funasr>=1.2.7",
     "minio>=7.2.20",
     "modelscope>=1.33.0",
+    "pytz>=2025.2",
     "silero-vad>=6.2.0",
     "uvicorn[standard]>=0.38.0",
 ]
