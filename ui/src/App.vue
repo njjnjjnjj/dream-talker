@@ -31,6 +31,12 @@ watch(selectedDate, (newDate) => {
   searchTerm.value = ''; // Reset search on date change
 }, { immediate: true });
 
+const sortOrder = ref<'asc' | 'desc'>('asc');
+
+const toggleSortOrder = () => {
+  sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc';
+};
+
 // Fetch stats when tab changes
 watch(activeTab, (newTab) => {
   if (newTab === 'stats') {
@@ -50,12 +56,18 @@ const handleUpdateRecord = (id: string, updates: Partial<SleepRecord>) => {
   records.value = records.value.map(rec => rec.id === id ? { ...rec, ...updates } : rec);
 };
 
-// Filter records based on search and favorites
+// Filter and sort records
 const filteredRecords = computed(() => {
-  return records.value.filter(record => {
+  const filtered = records.value.filter(record => {
     const matchesSearch = record.transcription.toLowerCase().includes(searchTerm.value.toLowerCase());
     const matchesFav = showFavoritesOnly.value ? record.is_favorite : true;
     return matchesSearch && matchesFav;
+  });
+
+  return filtered.sort((a, b) => {
+    const dateA = new Date(a.timestamp).getTime();
+    const dateB = new Date(b.timestamp).getTime();
+    return sortOrder.value === 'asc' ? dateA - dateB : dateB - dateA;
   });
 });
 
@@ -144,6 +156,14 @@ const getRecordWithAudioUrl = (record: SleepRecord) => {
           <span class="text-xs font-mono text-slate-500 bg-slate-900 px-2 py-1 rounded border border-slate-800">
             {{ filteredRecords.length }} / {{ records.length }} {{ t.timeline.eventsDetected }}
           </span>
+           <button @click="toggleSortOrder" class="p-2 text-slate-400 hover:text-indigo-400 hover:bg-slate-900 rounded-lg transition-colors border border-transparent hover:border-slate-800">
+             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-up-down">
+               <path d="m21 16-4 4-4-4"/>
+               <path d="M17 20V4"/>
+               <path d="m3 8 4-4 4 4"/>
+               <path d="M7 4v16"/>
+             </svg>
+           </button>
         </div>
 
         <div class="grid gap-6">
