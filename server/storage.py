@@ -97,7 +97,8 @@ class MinioStorage(StorageBackend):
                 total=1,  # 库内部只重试1次，我们自己在业务逻辑层控制重试
                 backoff_factor=0.2,
                 status_forcelist=[500, 502, 503, 504]
-            )
+            ),
+            maxsize=20 # 增加连接池大小，避免并发请求时阻塞
         )
         
         self.client = Minio(
