@@ -284,7 +284,7 @@ const timeString = computed(() => new Date(props.record.timestamp).toLocaleTimeS
         </div>
 
         <!-- Time Display -->
-        <div class="flex-shrink-0 font-mono text-[9px] xs:text-xs sm:text-sm text-slate-400 w-16 sm:w-20 text-right whitespace-nowrap"> <!-- Smallest possible font, always visible -->
+        <div class="flex-shrink-0 font-mono text-[9px] xs:text-xs sm:text-sm text-slate-400 min-w-[4.5rem] text-right whitespace-nowrap"> <!-- Smallest possible font, always visible -->
             <span :class="isPlaying ? 'text-indigo-400 font-bold' : ''">{{ formatTime(currentTime) }}</span>
             <span class="mx-0.5 opacity-50">/</span> <!-- Reduced mx -->
             <span>{{ formatTime(duration) }}</span>
