@@ -59,8 +59,10 @@ const handleLogin = async () => {
           }
         });
         const credsData = await credsResponse.json();
-        
-        if (credsData.exists) {
+        const localRegistered = localStorage.getItem('webauthn_local_registered');
+
+        // Only skip if server has credentials AND this device (browser) is marked as registered locally
+        if (credsData.exists && localRegistered === 'true') {
            router.push('/');
         } else {
            showBiometricSetup.value = true;
@@ -120,6 +122,7 @@ const setupBiometrics = async () => {
     });
 
     if (verifyResponse.ok) {
+      localStorage.setItem('webauthn_local_registered', 'true');
       router.push('/');
     } else {
       biometricError.value = t.value.login.errors.biometricSetupFailed;
@@ -173,6 +176,7 @@ const handleBiometricLogin = async () => {
         const data = await verifyResponse.json();
         if (data.access_token) {
             sessionStorage.setItem('access_token', data.access_token);
+            localStorage.setItem('webauthn_local_registered', 'true');
             router.push('/');
         } else {
             error.value = t.value.login.errors.biometricLoginFailed;
