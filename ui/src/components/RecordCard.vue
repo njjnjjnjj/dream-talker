@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
 import type { SleepRecord } from '../types';
 import { useLanguage } from '../composables/useLanguage';
 import { useRecordsApi } from '../api/records';
+import WaveSurfer from 'wavesurfer.js';
 
 interface RecordCardProps {
   record: SleepRecord;
@@ -19,224 +20,117 @@ const isAudioLoaded = ref(false); // Track audio loading state
 const isAudioError = ref(false); // Track audio error state
 const isLoadingOnDemand = ref(false); // New state for on-demand loading
 const currentTime = ref(0);
-const audioPlayer = ref<HTMLAudioElement | null>(null);
-const cardElement = ref<HTMLDivElement | null>(null); // Ref for the card's root element
-const isIntersecting = ref(false); // State to track if the card is in viewport
+const audioPlayer = ref<HTMLAudioElement | null>(null); // Kept for potential future use, but not for playback control
+const cardElement = ref<HTMLDivElement | null>(null);
+const waveformContainer = ref<HTMLDivElement | null>(null);
+const wavesurfer = ref<WaveSurfer | null>(null);
 const duration = ref(props.record.duration);
-const waveformData = ref<number[]>([]);
-const isWaveformReady = ref(false);
-
-// Responsive number of waveform bars
-const numWaveformBars = computed(() => {
-  return window.innerWidth < 500 ? 30 : 60; // Example: 30 bars for screens < 500px, 60 otherwise
-});
-
-// Create a static, consistent waveform pattern based on the record ID
-const simulatedWaveform = computed(() => {
-  const bars = numWaveformBars.value;
-  // Simple pseudo-random generator seeded by id string length + index
-  return Array.from({ length: bars }, (_, i) => {
-       const seed = props.record.id.charCodeAt(props.record.id.length - 1) + i;
-       // Generate values between 20% and 100% height
-       return 20 + (Math.sin(seed) * 40 + 40);
-  });
-});
-
-const displayWaveform = computed(() => {
-    return isWaveformReady.value ? waveformData.value : simulatedWaveform.value;
-});
-
-// To react to window.innerWidth changes, you'd typically need to
-// add a reactive state for width and update it on resize event.
-// For now, on initial load and potentially on orientation change, this will adapt.
+const isIntersecting = ref(false); // Used for pre-loading
 
 onMounted(() => {
-  const player = audioPlayer.value;
-  if (!player || !cardElement.value) return;
+  if (!waveformContainer.value || !cardElement.value) return;
 
+  // Initialize WaveSurfer
+  wavesurfer.value = WaveSurfer.create({
+    container: waveformContainer.value,
+    waveColor: 'rgb(51 65 85)', // slate-700
+    progressColor: 'rgb(99 102 241)', // indigo-500
+    barWidth: 3,
+    barRadius: 3,
+    barGap: 2,
+    height: 32,
+    cursorWidth: 0,
+    normalize: true,
+  });
+
+  const ws = wavesurfer.value;
+
+  // WaveSurfer event listeners
+  ws.on('ready', (newDuration: number) => {
+    duration.value = newDuration;
+    isLoadingOnDemand.value = false;
+    isAudioLoaded.value = true;
+    isAudioError.value = false;
+  });
+  ws.on('audioprocess', (time: number) => { currentTime.value = time; });
+  ws.on('play', () => {
+    isPlaying.value = true;
+    document.dispatchEvent(new CustomEvent('wavesurfer-play', { detail: { instance: ws } }));
+  });
+  ws.on('pause', () => { isPlaying.value = false; });
+  ws.on('finish', () => { isPlaying.value = false; });
+  ws.on('error', (err: Error) => {
+    console.error('WaveSurfer error:', err);
+    isAudioError.value = true;
+    isLoadingOnDemand.value = false;
+  });
+
+  // Listener to pause other instances
+  const handleOtherPlayers = (e: Event) => {
+    if ((e as CustomEvent).detail.instance !== ws) ws.pause();
+  };
+  document.addEventListener('wavesurfer-play', handleOtherPlayers);
+
+  // Setup Intersection Observer for preloading
   const observer = new IntersectionObserver(
     (entries) => {
       const entry = entries[0];
-      if (entry) {
-        isIntersecting.value = entry.isIntersecting;
+      if (entry && entry.isIntersecting) {
+        isIntersecting.value = true;
+        // Load audio when card is about to be visible, if not already loaded
+        if (!isAudioLoaded.value && !isLoadingOnDemand.value) {
+          isLoadingOnDemand.value = true;
+          ws.load(`/api/audio/${props.record.id}`);
+        }
+        // No need to unobserve, as loading should only happen once.
       }
     },
-    { rootMargin: "200px" } // Pre-load/prepare when 200px away from viewport
+    { rootMargin: "200px" } // Trigger when 200px away from viewport
   );
-
   observer.observe(cardElement.value);
 
-  const updateCurrentTime = () => {
-    // CRITICAL OPTIMIZATION: Only update currentTime if the card is visible.
-    // This prevents massive re-renders from hundreds of hidden cards during playback.
-    if (isIntersecting.value) {
-      currentTime.value = player.currentTime;
-    }
-  };
-
-  const setDuration = () => {
-      if (player.duration && isFinite(player.duration)) {
-          duration.value = player.duration;
-      }
-  };
-
-  const onPlayEnd = () => {
-    isPlaying.value = false;
-    player.currentTime = 0;
-  };
-
-  const onCanPlay = () => {
-    isAudioLoaded.value = true;
-    isAudioError.value = false;
-    isLoadingOnDemand.value = false; // Stop loading indicator
-  };
- 
-   const onError = () => {
-     isAudioError.value = true;
-     isAudioLoaded.value = false;
-     isLoadingOnDemand.value = false; // Stop loading indicator on error
-   };
-
-  const onPlayStart = () => {
-      // Pause all other audio elements when this one starts playing
-      document.querySelectorAll('audio').forEach((el) => {
-          if (el !== player && !el.paused) {
-              el.pause();
-          }
-      });
-      isPlaying.value = true;
-  };
-
-  const onPause = () => {
-      isPlaying.value = false;
-  };
-
-  player.addEventListener('timeupdate', updateCurrentTime);
-  player.addEventListener('loadedmetadata', setDuration);
-  player.addEventListener('ended', onPlayEnd);
-  player.addEventListener('canplay', onCanPlay);
-  player.addEventListener('error', onError);
-  player.addEventListener('play', onPlayStart);
-  player.addEventListener('pause', onPause);
-
+  // Cleanup on unmount
   onUnmounted(() => {
-    player.removeEventListener('timeupdate', updateCurrentTime);
-    player.removeEventListener('loadedmetadata', setDuration);
-    player.removeEventListener('ended', onPlayEnd);
-    player.removeEventListener('canplay', onCanPlay);
-    player.removeEventListener('error', onError);
-    player.removeEventListener('play', onPlayStart);
-    player.removeEventListener('pause', onPause);
-    
-    // Disconnect the observer
+    ws.destroy();
+    document.removeEventListener('wavesurfer-play', handleOtherPlayers);
     if (cardElement.value) {
       observer.unobserve(cardElement.value);
     }
   });
 });
 
-const generateWaveform = async (audioUrl: string) => {
-  try {
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const response = await fetch(audioUrl);
-    const arrayBuffer = await response.arrayBuffer();
-    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-    const channelData = audioBuffer.getChannelData(0);
-    const bars = numWaveformBars.value;
-    const samplesPerBar = Math.floor(channelData.length / bars);
-    const waveform = [];
-    
-    // Find the max peak in the entire audio for normalization
-    let maxPeak = 0;
-    for (let i = 0; i < channelData.length; i++) {
-        const peakValue = channelData[i];
-        if (peakValue !== undefined) {
-            const peak = Math.abs(peakValue);
-            if (peak > maxPeak) {
-                maxPeak = peak;
-            }
-        }
-    }
-    // Avoid division by zero for silent audio
-    const normalizationFactor = maxPeak > 0 ? 1 / maxPeak : 1;
-
-    for (let i = 0; i < bars; i++) {
-        let sum = 0;
-        const startIndex = i * samplesPerBar;
-        for (let j = 0; j < samplesPerBar; j++) {
-            const sampleIndex = startIndex + j;
-            if (sampleIndex < channelData.length) {
-                const sampleValue = channelData[sampleIndex];
-                if (sampleValue !== undefined) {
-                    // Normalize and add the sample
-                    sum += Math.abs(sampleValue) * normalizationFactor;
-                }
-            }
-        }
-        const avg = sum / samplesPerBar;
-
-        // Apply logarithmic scaling to amplify smaller values
-        // The addition of a small constant (e.g., 1) before log avoids log(0) which is -Infinity
-        // The scale factor (e.g., 50) adjusts the final height
-        const logValue = Math.log10(avg * 100 + 1) * 50;
-        const height = Math.min(100, logValue);
-        
-        waveform.push(Math.max(5, height)); // Ensure a minimum height of 5%
-    }
-    waveformData.value = waveform;
-    isWaveformReady.value = true;
-  } catch (error) {
-    console.error('Error generating waveform:', error);
-    // Fallback to simulated waveform is handled by displayWaveform computed property
-  }
-};
-
-
 const togglePlay = () => {
-    const player = audioPlayer.value;
-    if (!player) return;
+  const ws = wavesurfer.value;
+  if (!ws || isAudioError.value) return;
 
-    if (isAudioError.value) return;
-
-    // On the very first play, set the src, load audio, and generate waveform
-    if (!player.src) {
-        isLoadingOnDemand.value = true;
-        const audioUrl = `/api/audio/${props.record.id}`;
-        player.src = audioUrl;
-        player.load();
-
-        // Generate waveform in parallel
-        generateWaveform(audioUrl);
-
-        player.play().catch(e => {
-            console.error("Audio playback failed:", e);
-            isAudioError.value = true;
-        });
-        return;
-    }
-
-    if (isPlaying.value) {
-        player.pause();
-    } else {
-        if (player.ended) {
-            player.currentTime = 0;
-        }
-        player.play();
-    }
+  // If audio is not loaded yet, clicking play will just wait
+  // for the pre-loading to finish. The user can click play, and it will
+  // start as soon as it's ready.
+  if (!isAudioLoaded.value) {
+      // If for some reason observer didn't trigger, trigger load now.
+      if (!isLoadingOnDemand.value) {
+          isLoadingOnDemand.value = true;
+          ws.load(`/api/audio/${props.record.id}`);
+      }
+      // Play once ready
+      ws.once('ready', () => {
+          ws.play();
+      });
+      return;
+  }
+  
+  ws.playPause();
 };
 
 const handleSeek = (event: MouseEvent) => {
-  const player = audioPlayer.value;
-  if (!player) return;
-  
+  const ws = wavesurfer.value;
+  if (!ws || !isAudioLoaded.value) return;
+
   const target = event.currentTarget as HTMLDivElement;
   const rect = target.getBoundingClientRect();
   const x = event.clientX - rect.left;
-  const percentage = Math.min(Math.max(x / rect.width, 0), 1);
-  const newTime = percentage * duration.value;
-  
-  player.currentTime = newTime;
-  currentTime.value = newTime;
+  const progress = x / rect.width;
+  ws.seekTo(progress);
 };
 
 const formatTime = (seconds: number) => {
@@ -278,11 +172,6 @@ const timeString = computed(() => new Date(props.record.timestamp).toLocaleTimeS
         : 'border-slate-700/50 hover:border-slate-600'
     }`"
   >
-    <audio
-      ref="audioPlayer"
-      preload="auto"
-      class="hidden"
-    ></audio>
     
     <!-- Header Info -->
     <div class="flex justify-between items-start mb-4">
@@ -356,18 +245,12 @@ const timeString = computed(() => new Date(props.record.timestamp).toLocaleTimeS
         </button>
 
         <!-- Interactive Waveform / Progress Bar -->
-        <div class="flex-1 h-full flex flex-col justify-center cursor-pointer group/waveform min-w-[100px]" @click="handleSeek"> <!-- Removed sm:min-w-[178px] -->
-           <!-- Visual Bars -->
-           <div class="flex items-center justify-between h-8 gap-[2px]">
-              <div
-                 v-for="(height, i) in displayWaveform"
-                 :key="i"
-                 :class="`w-1 rounded-full transition-colors duration-150 ${
-                     (i / displayWaveform.length) <= (currentTime / duration) ? 'bg-indigo-500' : 'bg-slate-700 group-hover/waveform:bg-slate-600'
-                 }`"
-                 :style="{ height: `${height}%` }"
-              />
-           </div>
+        <div
+          ref="waveformContainer"
+          class="flex-1 h-full flex flex-col justify-center cursor-pointer min-w-[100px]"
+          @click="handleSeek"
+        >
+          <!-- wavesurfer.js will mount here -->
         </div>
 
         <!-- Time Display -->
