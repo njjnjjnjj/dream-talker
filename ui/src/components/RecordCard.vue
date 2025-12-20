@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
-import { type SleepRecord } from '../types';
+import type { SleepRecord } from '../types';
 import { useLanguage } from '../composables/useLanguage';
 import { useRecordsApi } from '../api/records';
 
@@ -20,6 +20,8 @@ const isAudioError = ref(false); // Track audio error state
 const isLoadingOnDemand = ref(false); // New state for on-demand loading
 const currentTime = ref(0);
 const audioPlayer = ref<HTMLAudioElement | null>(null);
+const cardElement = ref<HTMLDivElement | null>(null); // Ref for the card's root element
+const isIntersecting = ref(false); // State to track if the card is in viewport
 const duration = ref(props.record.duration);
 
 // Responsive number of waveform bars
@@ -48,12 +50,28 @@ const waveformData = computed(() => {
 
 onMounted(() => {
   const player = audioPlayer.value;
-  if (!player) return;
+  if (!player || !cardElement.value) return;
+
+  const observer = new IntersectionObserver(
+    (entries) => {
+      const entry = entries[0];
+      if (entry) {
+        isIntersecting.value = entry.isIntersecting;
+      }
+    },
+    { rootMargin: "200px" } // Pre-load/prepare when 200px away from viewport
+  );
+
+  observer.observe(cardElement.value);
 
   const updateCurrentTime = () => {
-    currentTime.value = player.currentTime;
+    // CRITICAL OPTIMIZATION: Only update currentTime if the card is visible.
+    // This prevents massive re-renders from hundreds of hidden cards during playback.
+    if (isIntersecting.value) {
+      currentTime.value = player.currentTime;
+    }
   };
-  
+
   const setDuration = () => {
       if (player.duration && isFinite(player.duration)) {
           duration.value = player.duration;
@@ -107,6 +125,11 @@ onMounted(() => {
     player.removeEventListener('error', onError);
     player.removeEventListener('play', onPlayStart);
     player.removeEventListener('pause', onPause);
+    
+    // Disconnect the observer
+    if (cardElement.value) {
+      observer.unobserve(cardElement.value);
+    }
   });
 });
 
@@ -185,6 +208,7 @@ const timeString = computed(() => new Date(props.record.timestamp).toLocaleTimeS
 
 <template>
   <div
+    ref="cardElement"
     :class="`bg-slate-800 rounded-xl p-5 border transition-all shadow-md group ${
       record.is_favorite
         ? 'border-amber-500/30 hover:border-amber-500/50 shadow-amber-900/10'
@@ -314,5 +338,5 @@ const timeString = computed(() => new Date(props.record.timestamp).toLocaleTimeS
 </template>
 
 <style scoped>
-/* Add any scoped styles here if necessary */
+/* Removed content-visibility as we are now using a more robust IntersectionObserver approach */
 </style>

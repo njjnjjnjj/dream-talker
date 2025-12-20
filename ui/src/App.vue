@@ -99,10 +99,37 @@ const getRecordWithAudioUrl = (record: SleepRecord) => {
   };
 };
 
+const smoothScrollTo = (y: number, duration = 500) => {
+  const start = window.scrollY;
+  const distance = y - start;
+  let startTime: number | null = null;
+
+  const ease = (t: number) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+
+  const animation = (currentTime: number) => {
+    if (startTime === null) startTime = currentTime;
+    const timeElapsed = currentTime - startTime;
+    const progress = Math.min(timeElapsed / duration, 1);
+    
+    window.scrollTo(0, start + distance * ease(progress));
+
+    if (timeElapsed < duration) {
+      requestAnimationFrame(animation);
+    }
+  };
+
+  requestAnimationFrame(animation);
+};
+
 const scrollToRecord = (recordId: string) => {
   const element = document.getElementById(`record-${recordId}`);
   if (element) {
-    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const elementRect = element.getBoundingClientRect();
+    const absoluteElementTop = elementRect.top + window.scrollY;
+    const middle = absoluteElementTop - (window.innerHeight / 2) + (elementRect.height / 2);
+    
+    smoothScrollTo(middle, 300); // Scroll over 300ms
+
     // Highlight the card briefly
     element.classList.add('ring-2', 'ring-indigo-500', 'transition-all', 'duration-500');
     setTimeout(() => {
@@ -112,7 +139,7 @@ const scrollToRecord = (recordId: string) => {
 };
 
 const scrollToTop = () => {
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  smoothScrollTo(0, 300);
 };
 </script>
 
