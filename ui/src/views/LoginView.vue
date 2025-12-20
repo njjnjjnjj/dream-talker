@@ -65,6 +65,7 @@ const setupBiometrics = async () => {
     const optionsResponse = await fetch('/api/webauthn/register/options');
     const options = await optionsResponse.json();
     const decodedOptions = decodeServerOptions(options);
+    console.log('Decoded Options:', decodedOptions); // Debugging
 
     const credential = await navigator.credentials.create({
       publicKey: decodedOptions,
@@ -72,10 +73,21 @@ const setupBiometrics = async () => {
 
     const encodedCredential = encodeClientResponse(credential);
 
+    // Manually construct a plain object for serialization
+    const verificationData = {
+      id: encodedCredential.id,
+      rawId: encodedCredential.rawId,
+      type: encodedCredential.type,
+      response: {
+        clientDataJSON: encodedCredential.response.clientDataJSON,
+        attestationObject: encodedCredential.response.attestationObject,
+      },
+    };
+
     const verifyResponse = await fetch('/api/webauthn/register/verify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ response: encodedCredential }),
+      body: JSON.stringify({ response: verificationData }),
     });
 
     if (verifyResponse.ok) {
@@ -109,16 +121,33 @@ const handleBiometricLogin = async () => {
     
     const encodedCredential = encodeClientResponse(credential);
 
+    // Manually construct a plain object for serialization
+    const verificationData = {
+      id: encodedCredential.id,
+      rawId: encodedCredential.rawId,
+      type: encodedCredential.type,
+      response: {
+        clientDataJSON: encodedCredential.response.clientDataJSON,
+        authenticatorData: encodedCredential.response.authenticatorData,
+        signature: encodedCredential.response.signature,
+        userHandle: encodedCredential.response.userHandle,
+      },
+    };
+
     const verifyResponse = await fetch('/api/webauthn/login/verify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ response: encodedCredential }),
+      body: JSON.stringify({ response: verificationData }),
     });
 
     if (verifyResponse.ok) {
-        // FIXME: The backend should return a real token
-        sessionStorage.setItem('access_token', 'biometric_authenticated');
-        router.push('/');
+        const data = await verifyResponse.json();
+        if (data.access_token) {
+            sessionStorage.setItem('access_token', data.access_token);
+            router.push('/');
+        } else {
+            error.value = t.value.login.errors.biometricLoginFailed;
+        }
     } else {
         error.value = t.value.login.errors.biometricLoginFailed;
     }

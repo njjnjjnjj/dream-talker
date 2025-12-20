@@ -18,20 +18,20 @@ from records import get_records_by_date, get_audio_file_by_id, get_monthly_recor
 from storage import get_storage_backend, StorageBackend
 from auth import (
     get_user_credentials,
+    get_credential_by_id,
     save_credential,
     update_credential_sign_count,
-    RP_ID,
-    RP_NAME,
-    ORIGIN,
+    init_auth_config,
     FIXED_USER_ID,
 )
+import auth
 from webauthn import (
     generate_registration_options,
     verify_registration_response,
     generate_authentication_options,
     verify_authentication_response,
 )
-from webauthn.helpers import options_to_json_dict
+from webauthn.helpers import options_to_json_dict, base64url_to_bytes
 from webauthn.helpers.structs import AuthenticatorSelectionCriteria, ResidentKeyRequirement, UserVerificationRequirement
 
 init_log()
@@ -81,6 +81,9 @@ async def startup_event():
     elif ACCESS_CODE == "changeme-please":
         logger.warning("安全警告: 您正在使用默认的访问码 'changeme-please'。请立即在 .config.yaml 中修改为一个强密码。")
 
+    # 初始化认证配置 (WebAuthn)
+    init_auth_config(security_config)
+
     # 初始化存储后端
     storage_config = config.get('storage', {})
     storage_backend = get_storage_backend(storage_config)
@@ -100,7 +103,7 @@ async def auth_middleware(request: Request, call_next):
     """中间件，用于保护 API 路由。"""
     path = request.url.path
     # 豁免登录和 webauthn 相关的端点
-    exempt_paths = ["/api/login", "/api/webauthn"]
+    exempt_paths = ["/api/login", "/api/webauthn/"]
     if ACCESS_CODE and path.startswith("/api/") and not any(path.startswith(p) for p in exempt_paths):
         auth_header = request.headers.get("Authorization")
         if auth_header is None:
@@ -164,8 +167,8 @@ async def login(request: LoginRequest, raw_request: Request):
 async def webauthn_register_options():
     """生成 WebAuthn 注册选项"""
     options = generate_registration_options(
-        rp_id=RP_ID,
-        rp_name=RP_NAME,
+        rp_id=auth.RP_ID,
+        rp_name=auth.RP_NAME,
         user_id=FIXED_USER_ID.encode('utf-8'),
         user_name=FIXED_USER_ID,
         exclude_credentials=get_user_credentials(FIXED_USER_ID),
@@ -191,8 +194,8 @@ async def webauthn_register_verify(request: RegistrationVerificationRequest, raw
         verification = verify_registration_response(
             credential=request.response,
             expected_challenge=challenge,
-            expected_origin=ORIGIN,
-            expected_rp_id=RP_ID,
+            expected_origin=auth.ORIGIN,
+            expected_rp_id=auth.RP_ID,
             require_user_verification=True
         )
         
@@ -206,8 +209,9 @@ async def webauthn_register_verify(request: RegistrationVerificationRequest, raw
 async def webauthn_login_options():
     """生成 WebAuthn 登录选项"""
     options = generate_authentication_options(
-        rp_id=RP_ID,
-        allow_credentials=get_user_credentials(FIXED_USER_ID)
+        rp_id=auth.RP_ID,
+        allow_credentials=get_user_credentials(FIXED_USER_ID),
+        user_verification=UserVerificationRequirement.REQUIRED
     )
     challenge_storage[FIXED_USER_ID] = options.challenge
     return JSONResponse(content=options_to_json_dict(options))
@@ -223,17 +227,29 @@ async def webauthn_login_verify(request: AuthenticationVerificationRequest, raw_
         if not challenge:
             raise HTTPException(status_code=400, detail="Challenge not found")
 
+        # 从响应中获取 Credential ID，以便查找存储的公钥
+        credential_id_b64 = request.response.get("id")
+        if not credential_id_b64:
+             raise HTTPException(status_code=400, detail="Credential ID missing")
+        
+        credential_id = base64url_to_bytes(credential_id_b64)
+        stored_credential = get_credential_by_id(credential_id)
+        
+        if not stored_credential:
+            raise HTTPException(status_code=400, detail="Credential not found")
+
         verification = verify_authentication_response(
             credential=request.response,
             expected_challenge=challenge,
-            expected_origin=ORIGIN,
-            expected_rp_id=RP_ID,
+            expected_origin=auth.ORIGIN,
+            expected_rp_id=auth.RP_ID,
             require_user_verification=True,
-            credentials=get_user_credentials(FIXED_USER_ID)
+            credential_public_key=stored_credential["public_key"],
+            credential_current_sign_count=stored_credential["sign_count"]
         )
         
         update_credential_sign_count(verification.credential_id, verification.new_sign_count)
-        return {"status": "success", "message": "登录成功"}
+        return {"status": "success", "message": "登录成功", "access_token": ACCESS_CODE}
     except Exception as e:
         logger.error(f"WebAuthn authentication verification failed: {e}")
         raise HTTPException(status_code=401, detail="无效的凭证")

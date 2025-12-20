@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue';
-import { RouterLink, RouterView, useRoute } from 'vue-router';
+import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router';
 import { useLanguage } from './composables/useLanguage';
-import { Moon, Mic, BarChart2, Settings, Globe, ArrowUp } from 'lucide-vue-next';
+import { Moon, Mic, BarChart2, Settings, Globe, ArrowUp, LogOut } from 'lucide-vue-next';
 
 const { t, language, setLanguage } = useLanguage();
 const route = useRoute();
+const router = useRouter();
 const showBackToTop = ref(false);
 
 const isLoginPage = computed(() => route.name === 'login');
@@ -24,6 +25,11 @@ onUnmounted(() => {
 
 const toggleLanguage = () => {
   setLanguage(language.value === 'en' ? 'zh' : 'en');
+};
+
+const handleLogout = () => {
+  sessionStorage.removeItem('access_token');
+  router.push('/login');
 };
 
 const smoothScrollTo = (y: number, duration = 300) => {
@@ -96,6 +102,14 @@ const scrollToTop = () => {
             title="Switch Language"
           >
             <Globe :size="20" />
+          </button>
+          
+          <button
+            @click="handleLogout"
+            class="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-900 rounded-lg transition-colors border border-transparent hover:border-slate-800"
+            title="Logout"
+          >
+            <LogOut :size="20" />
           </button>
         </div>
       </div>

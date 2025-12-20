@@ -19,6 +19,9 @@ export default defineConfig({
   },
   server: {
     host: true, // Make Vite accessible on the local network
+    allowedHosts: [
+      "dream.nimou.space"
+    ],
     proxy: {
       // 代理 /api 请求
       '/api': {

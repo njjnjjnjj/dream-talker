@@ -1,19 +1,13 @@
 import logging
+import os
 from datetime import datetime
-import uuid
 import json
+from typing import Optional, List, Dict
 
-from webauthn import (
-    generate_registration_options,
-    verify_registration_response,
-    generate_authentication_options,
-    verify_authentication_response,
-)
 from webauthn.helpers.structs import (
     RegistrationCredential,
-    AuthenticationCredential,
-    AuthenticatorSelectionCriteria,
-    ResidentKeyRequirement,
+    PublicKeyCredentialDescriptor,
+    AuthenticatorTransport,
 )
 from database import get_db_connection
 
@@ -22,38 +16,68 @@ logger = logging.getLogger(__name__)
 # 在单用户模式下，我们可以使用一个固定的 user_id
 # 在多用户系统中，这里应该是实际的用户 ID
 FIXED_USER_ID = "default-user"
-RP_ID = "localhost"  # 依赖于实际部署的域名
+RP_ID = "localhost"
 RP_NAME = "DreamTalker"
-ORIGIN = "http://localhost:5173" # 依赖于前端服务的地址
+ORIGIN = "http://localhost:5173"
 
-def get_user_credentials(user_id: str) -> list[RegistrationCredential]:
-    """从数据库获取用户的凭证"""
-    credentials = []
+def init_auth_config(security_config: Dict):
+    """初始化认证配置"""
+    global RP_ID, ORIGIN
+    # 优先从配置中读取，如果没有则回退到环境变量，最后是默认值
+    RP_ID = security_config.get("rp_id", os.getenv("RP_ID", "localhost"))
+    ORIGIN = security_config.get("origin", os.getenv("ORIGIN", "http://localhost:5173"))
+    logger.info(f"Auth config initialized: RP_ID='{RP_ID}', ORIGIN='{ORIGIN}'")
+
+def get_user_credentials(user_id: str) -> List[PublicKeyCredentialDescriptor]:
+    """从数据库获取用户的凭证列表，用于 exclude/allow credentials"""
+    descriptors = []
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT id, public_key, sign_count, transports FROM webauthn_credentials WHERE user_id = ?",
+                "SELECT id, transports FROM webauthn_credentials WHERE user_id = ?",
                 (user_id,),
             )
             for row in cursor.fetchall():
                 transports_list = json.loads(row["transports"]) if row["transports"] else []
-                credentials.append(
-                    RegistrationCredential(
+                # 转换 transports 字符串列表为 Enum 列表
+                transports_enum = [AuthenticatorTransport(t) for t in transports_list] if transports_list else None
+                
+                descriptors.append(
+                    PublicKeyCredentialDescriptor(
                         id=row["id"],
-                        public_key=row["public_key"],
-                        sign_count=row["sign_count"],
-                        transports=transports_list
+                        transports=transports_enum
                     )
                 )
     except Exception as e:
         logger.error(f"Failed to get credentials for user {user_id}: {e}")
-    return credentials
+    return descriptors
 
-def save_credential(user_id: str, cred: RegistrationCredential) -> None:
+def get_credential_by_id(credential_id: bytes) -> Optional[dict]:
+    """根据 ID 获取单个凭证的详细信息（公钥、签名计数等）"""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT public_key, sign_count FROM webauthn_credentials WHERE id = ?",
+                (credential_id,),
+            )
+            row = cursor.fetchone()
+            if row:
+                return {
+                    "public_key": row["public_key"],
+                    "sign_count": row["sign_count"]
+                }
+    except Exception as e:
+        logger.error(f"Failed to get credential by id: {e}")
+    return None
+
+def save_credential(user_id: str, verification: RegistrationCredential) -> None:
     """将新凭证保存到数据库"""
     now = datetime.utcnow().isoformat()
-    transports_json = json.dumps(cred.transports) if cred.transports else None
+    # The `transports` attribute is not available on the verification object.
+    # We will save it as None.
+    transports_json = None
     
     try:
         with get_db_connection() as conn:
@@ -64,22 +88,22 @@ def save_credential(user_id: str, cred: RegistrationCredential) -> None:
                 VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    cred.id,
+                    verification.credential_id,
                     user_id,
-                    cred.public_key,
-                    cred.sign_count,
+                    verification.credential_public_key,
+                    verification.sign_count, 
                     transports_json,
                     now,
                     now
                 ),
             )
             conn.commit()
-        logger.info(f"Successfully saved credential {cred.id} for user {user_id}")
+        logger.info(f"Successfully saved credential {verification.credential_id} for user {user_id}")
     except Exception as e:
         logger.error(f"Failed to save credential for user {user_id}: {e}")
         raise
 
-def update_credential_sign_count(cred_id: str, new_sign_count: int) -> None:
+def update_credential_sign_count(cred_id: bytes, new_sign_count: int) -> None:
     """更新凭证的签名计数"""
     now = datetime.utcnow().isoformat()
     try:
