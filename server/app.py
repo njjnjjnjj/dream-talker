@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 import logging
+from pydantic import BaseModel
 import uvicorn
 import yaml
 import os
@@ -7,7 +8,6 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Requ
 from fastapi.responses import JSONResponse
 from datetime import date, timedelta, datetime
 from typing import List, Dict, Optional
-from pydantic import BaseModel
 
 from log import init_log
 from vad.engine import VadEngine
@@ -16,10 +16,29 @@ from database import init_db, add_record
 from schemas import MonthlyActivity, SleepRecordCreate, SleepRecord, StatisticsResponse
 from records import get_records_by_date, get_audio_file_by_id, get_monthly_record_activity, update_record_favorite_status, get_statistics
 from storage import get_storage_backend, StorageBackend
+from auth import (
+    get_user_credentials,
+    save_credential,
+    update_credential_sign_count,
+    RP_ID,
+    RP_NAME,
+    ORIGIN,
+    FIXED_USER_ID,
+)
+from webauthn import (
+    generate_registration_options,
+    verify_registration_response,
+    generate_authentication_options,
+    verify_authentication_response,
+)
+from webauthn.helpers import options_to_json_dict
+from webauthn.helpers.structs import AuthenticatorSelectionCriteria, ResidentKeyRequirement, UserVerificationRequirement
 
 init_log()
 logger = logging.getLogger(__name__)
 
+# 临时存储挑战码
+challenge_storage: Dict[str, bytes] = {}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -79,7 +98,10 @@ async def startup_event():
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
     """中间件，用于保护 API 路由。"""
-    if ACCESS_CODE and request.url.path.startswith("/api/") and not request.url.path == "/api/login":
+    path = request.url.path
+    # 豁免登录和 webauthn 相关的端点
+    exempt_paths = ["/api/login", "/api/webauthn"]
+    if ACCESS_CODE and path.startswith("/api/") and not any(path.startswith(p) for p in exempt_paths):
         auth_header = request.headers.get("Authorization")
         if auth_header is None:
             return JSONResponse(status_code=401, content={"detail": "未提供认证信息"})
@@ -137,6 +159,84 @@ async def login(request: LoginRequest, raw_request: Request):
             
         raise HTTPException(status_code=401, detail="无效的访问码")
 
+
+@app.get("/api/webauthn/register/options")
+async def webauthn_register_options():
+    """生成 WebAuthn 注册选项"""
+    options = generate_registration_options(
+        rp_id=RP_ID,
+        rp_name=RP_NAME,
+        user_id=FIXED_USER_ID.encode('utf-8'),
+        user_name=FIXED_USER_ID,
+        exclude_credentials=get_user_credentials(FIXED_USER_ID),
+        authenticator_selection=AuthenticatorSelectionCriteria(
+            resident_key=ResidentKeyRequirement.REQUIRED,
+            user_verification=UserVerificationRequirement.REQUIRED
+        )
+    )
+    challenge_storage[FIXED_USER_ID] = options.challenge
+    return JSONResponse(content=options_to_json_dict(options))
+
+class RegistrationVerificationRequest(BaseModel):
+    response: dict
+
+@app.post("/api/webauthn/register/verify")
+async def webauthn_register_verify(request: RegistrationVerificationRequest, raw_request: Request):
+    """验证 WebAuthn 注册响应"""
+    try:
+        challenge = challenge_storage.pop(FIXED_USER_ID, None)
+        if not challenge:
+            raise HTTPException(status_code=400, detail="Challenge not found")
+            
+        verification = verify_registration_response(
+            credential=request.response,
+            expected_challenge=challenge,
+            expected_origin=ORIGIN,
+            expected_rp_id=RP_ID,
+            require_user_verification=True
+        )
+        
+        save_credential(FIXED_USER_ID, verification)
+        return {"status": "success", "message": "设备绑定成功"}
+    except Exception as e:
+        logger.error(f"WebAuthn registration verification failed: {e}")
+        raise HTTPException(status_code=400, detail="设备绑定失败")
+
+@app.get("/api/webauthn/login/options")
+async def webauthn_login_options():
+    """生成 WebAuthn 登录选项"""
+    options = generate_authentication_options(
+        rp_id=RP_ID,
+        allow_credentials=get_user_credentials(FIXED_USER_ID)
+    )
+    challenge_storage[FIXED_USER_ID] = options.challenge
+    return JSONResponse(content=options_to_json_dict(options))
+
+class AuthenticationVerificationRequest(BaseModel):
+    response: dict
+
+@app.post("/api/webauthn/login/verify")
+async def webauthn_login_verify(request: AuthenticationVerificationRequest, raw_request: Request):
+    """验证 WebAuthn 登录响应"""
+    try:
+        challenge = challenge_storage.pop(FIXED_USER_ID, None)
+        if not challenge:
+            raise HTTPException(status_code=400, detail="Challenge not found")
+
+        verification = verify_authentication_response(
+            credential=request.response,
+            expected_challenge=challenge,
+            expected_origin=ORIGIN,
+            expected_rp_id=RP_ID,
+            require_user_verification=True,
+            credentials=get_user_credentials(FIXED_USER_ID)
+        )
+        
+        update_credential_sign_count(verification.credential_id, verification.new_sign_count)
+        return {"status": "success", "message": "登录成功"}
+    except Exception as e:
+        logger.error(f"WebAuthn authentication verification failed: {e}")
+        raise HTTPException(status_code=401, detail="无效的凭证")
 
 @app.websocket("/vad")
 async def websocket_binary(websocket: WebSocket):

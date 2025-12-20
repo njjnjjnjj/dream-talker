@@ -79,6 +79,17 @@ export const translations = {
         failed: 'Login failed. Please check the code and try again.',
         tooManyAttempts: 'Too many attempts. Please try again later.',
         unknown: 'An error occurred. Please try again later.',
+        biometricSetupFailed: 'An error occurred during biometric setup.',
+        biometricLoginFailed: 'Biometric login failed.',
+        biometricNotSupported: 'Biometric login is not supported on this browser.',
+      },
+      biometric: {
+         setupTitle: 'Enable Biometric Login?',
+         setupDescription: 'Would you like to use Face ID or Touch ID to log in faster next time?',
+         enableButton: 'Enable Biometrics',
+         settingUp: 'Setting up...',
+         skipButton: 'Skip for now',
+         loginButton: 'Use Biometrics',
       }
     }
   },
@@ -160,6 +171,17 @@ export const translations = {
         failed: '登录失败，请检查访问码后重试。',
         tooManyAttempts: '尝试次数过多，请稍后再试。',
         unknown: '发生未知错误，请稍后重试。',
+        biometricSetupFailed: '生物识别设置过程中发生错误。',
+        biometricLoginFailed: '生物识别登录失败。',
+        biometricNotSupported: '此浏览器不支持生物识别登录。',
+      },
+      biometric: {
+         setupTitle: '启用生物识别登录？',
+         setupDescription: '您希望下次使用面容 ID 或触控 ID 更快地登录吗？',
+         enableButton: '启用生物识别',
+         settingUp: '设置中...',
+         skipButton: '以后再说',
+         loginButton: '使用生物识别',
       }
     }
   },

@@ -31,7 +31,7 @@ onMounted(() => {
   if (!waveformContainer.value || !cardElement.value) return;
 
   // Initialize WaveSurfer
-  const token = localStorage.getItem('access_token');
+  const token = sessionStorage.getItem('access_token');
   const headers = new Headers();
   if (token) {
     headers.append('Authorization', `Bearer ${token}`);
@@ -89,7 +89,7 @@ onMounted(() => {
         // Load audio when card is about to be visible, if not already loaded
         if (!isAudioLoaded.value && !isLoadingOnDemand.value) {
           isLoadingOnDemand.value = true;
-          const token = localStorage.getItem('access_token');
+          const token = sessionStorage.getItem('access_token');
           const headers = new Headers();
           if (token) {
             headers.append('Authorization', `Bearer ${token}`);
@@ -124,7 +124,7 @@ const togglePlay = () => {
       // If for some reason observer didn't trigger, trigger load now.
       if (!isLoadingOnDemand.value) {
           isLoadingOnDemand.value = true;
-          const token = localStorage.getItem('access_token');
+          const token = sessionStorage.getItem('access_token');
           const headers = new Headers();
           if (token) {
             headers.append('Authorization', `Bearer ${token}`);
