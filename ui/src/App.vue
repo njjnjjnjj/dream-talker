@@ -196,8 +196,13 @@ const scrollToTop = () => {
              <button @click="isTimelineExpanded = !isTimelineExpanded" class="p-2 text-slate-400 hover:text-indigo-400 hover:bg-slate-900 rounded-lg transition-colors border border-transparent hover:border-slate-800" :title="isTimelineExpanded ? 'Collapse Timeline' : 'Expand Timeline'">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-hourglass transition-transform duration-300" :class="{'rotate-90': isTimelineExpanded}"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/></svg>
              </button>
-             <button @click="toggleSortOrder" class="p-2 text-slate-400 hover:text-indigo-400 hover:bg-slate-900 rounded-lg transition-colors border border-transparent hover:border-slate-800">
-               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-up-down">
+             <button
+               @click="toggleSortOrder"
+               class="p-2 rounded-lg transition-all duration-200 border"
+               :class="sortOrder === 'asc' ? 'bg-indigo-600/20 border-indigo-500/30 text-indigo-400' : 'text-slate-400 hover:text-indigo-400 bg-slate-900/50 hover:bg-slate-800 border-transparent hover:border-slate-700'"
+               title="Toggle Sort Order"
+             >
+               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-up-down transition-transform duration-300" :class="{'rotate-180': sortOrder === 'asc'}">
                  <path d="m21 16-4 4-4-4"/>
                  <path d="M17 20V4"/>
                  <path d="m3 8 4-4 4 4"/>
