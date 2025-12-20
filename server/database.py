@@ -71,6 +71,19 @@ def init_db():
                 FOREIGN KEY (record_id) REFERENCES records(id) ON DELETE CASCADE
             );
             """)
+
+            # 创建 webauthn_credentials 表
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS webauthn_credentials (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                public_key TEXT NOT NULL,
+                sign_count INTEGER NOT NULL DEFAULT 0,
+                transports TEXT,
+                created_at TEXT NOT NULL,
+                last_used_at TEXT
+            );
+            """)
             
             conn.commit()
         logger.info("Database initialized successfully.")

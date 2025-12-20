@@ -23,3 +23,6 @@ storage:
 security:
   # IMPORTANT: Change this to a long, random string for security!
   access_code: "Nijiajun@1108"
+  # WebAuthn settings (required for non-localhost deployment)
+  rp_id: "dream.nimou.space"
+  origin: "https://dream.nimou.space"

@@ -9,7 +9,7 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   plugins: [
     vue(),
-    vueDevTools(),
+    // vueDevTools(),
     tailwindcss()
   ],
   resolve: {
@@ -17,8 +17,14 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url))
     },
   },
+  esbuild: {
+    sourcemap: false, // 开发模式不生成 sourcemap
+  },
   server: {
     host: true, // Make Vite accessible on the local network
+    allowedHosts: [
+      "dream.nimou.space"
+    ],
     proxy: {
       // 代理 /api 请求
       '/api': {

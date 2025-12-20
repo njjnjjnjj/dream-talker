@@ -4,7 +4,7 @@ import type { SleepRecord, MonthlyActivity, StatisticsResponse } from '../types'
 const API_BASE_URL = '/api';
 
 const authedFetch = async (url: string, options: RequestInit = {}): Promise<Response> => {
-  const token = localStorage.getItem('access_token');
+  const token = sessionStorage.getItem('access_token');
   
   const headers = new Headers(options.headers || {});
   if (token) {
@@ -15,7 +15,7 @@ const authedFetch = async (url: string, options: RequestInit = {}): Promise<Resp
 
   if (response.status === 401) {
     // Token is invalid or expired, redirect to login
-    localStorage.removeItem('access_token');
+    sessionStorage.removeItem('access_token');
     // Use location.href to force a full page reload to clear any state
     window.location.href = '/login';
     // Throw an error to stop further execution in the current call chain

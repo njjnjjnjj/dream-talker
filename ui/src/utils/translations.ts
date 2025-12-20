@@ -79,6 +79,18 @@ export const translations = {
         failed: 'Login failed. Please check the code and try again.',
         tooManyAttempts: 'Too many attempts. Please try again later.',
         unknown: 'An error occurred. Please try again later.',
+        biometricSetupFailed: 'An error occurred during passkey setup.',
+        biometricLoginFailed: 'Passkey login failed.',
+        biometricNotSupported: 'Passkey login is not supported on this browser.',
+      },
+      biometric: {
+         subtitle: 'Use passkey login for faster access.',
+         setupTitle: 'Enable Passkey Login?',
+         setupDescription: 'Would you like to use Face ID or Touch ID to log in faster next time?',
+         enableButton: 'Enable Passkey',
+         settingUp: 'Setting up...',
+         skipButton: 'Skip for now',
+         loginButton: 'Use Passkey',
       }
     }
   },
@@ -160,6 +172,18 @@ export const translations = {
         failed: '登录失败，请检查访问码后重试。',
         tooManyAttempts: '尝试次数过多，请稍后再试。',
         unknown: '发生未知错误，请稍后重试。',
+        biometricSetupFailed: '通行密钥设置过程中发生错误。',
+        biometricLoginFailed: '通行密钥登录失败。',
+        biometricNotSupported: '此浏览器不支持通行密钥登录。',
+      },
+      biometric: {
+         subtitle: '使用通行密钥登录以更快访问。',
+         setupTitle: '启用通行密钥登录？',
+         setupDescription: '您希望下次使用面容 ID 或触控 ID 更快地登录吗？',
+         enableButton: '启用通行密钥',
+         settingUp: '设置中...',
+         skipButton: '以后再说',
+         loginButton: '使用通行密钥',
       }
     }
   },
