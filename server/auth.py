@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 # 在单用户模式下，我们可以使用一个固定的 user_id
 # 在多用户系统中，这里应该是实际的用户 ID
-FIXED_USER_ID = "default-user"
+FIXED_USER_ID = "dreamtalker"
 RP_ID = "localhost"
 RP_NAME = "DreamTalker"
 ORIGIN = "http://localhost:5173"
