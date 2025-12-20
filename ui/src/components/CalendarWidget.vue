@@ -119,32 +119,44 @@ const getDailySummary = (day: number) => {
         v-for="day in daysArray"
         :key="day"
         @click="handleDateClick(day)"
-        :class="`h-10 md:h-12 rounded-lg flex flex-col items-center justify-center relative transition-all border border-transparent
-          ${isSelected(day)
+        :class="[
+          'h-10 md:h-12 rounded-lg flex flex-col items-center justify-center relative transition-all border border-transparent',
+          isSelected(day)
             ? 'bg-indigo-600 text-white shadow-lg border-indigo-500'
-            : 'hover:bg-slate-700 text-slate-300 hover:border-slate-600'}
-          ${isToday(day) && !isSelected(day) ? 'bg-slate-700/50 text-indigo-300 border-slate-600' : ''}
-        `"
+            : 'hover:bg-slate-700 text-slate-300 hover:border-slate-600',
+          isToday(day) && !isSelected(day) ? 'bg-slate-700/50 text-indigo-300 border-slate-600' : '',
+          getDailySummary(day).total_records > 0 && !isSelected(day) ? 'bg-slate-700/30' : ''
+        ]"
       >
         <span :class="`text-sm ${isSelected(day) ? 'font-bold' : ''}`">{{ day }}</span>
         
-        <div class="flex items-center justify-center mt-0.5 gap-0.5"> <!-- Reduced gap -->
-          <span v-if="getDailySummary(day).total_records > 0"
-                :class="`text-[9px] px-1 rounded-full font-medium ${ // Reduced font size and padding
-                  isSelected(day)
-                    ? 'bg-white/20 text-white'
-                    : 'bg-indigo-500/20 text-indigo-400'
-                }`">
-            {{ getDailySummary(day).total_records }}
-          </span>
-          <span v-if="getDailySummary(day).favorite_records > 0"
-                :class="`text-[9px] px-1 rounded-full font-medium ${ // Reduced font size and padding
-                  isSelected(day)
-                    ? 'bg-white/20 text-white'
-                    : 'bg-amber-500/20 text-amber-400' // Yellow color for favorite records
-                }`">
-            ⭐ {{ getDailySummary(day).favorite_records }}
-          </span>
+        <!-- Stats Display -->
+        <div v-if="getDailySummary(day).total_records > 0" class="flex items-center justify-center gap-1 mt-0.5">
+          <!-- Desktop View: Icons + Numbers -->
+          <div class="hidden sm:flex items-center justify-center gap-1.5">
+              <div class="flex items-center gap-0.5" :title="`${getDailySummary(day).total_records} records`">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" :class="isSelected(day) ? 'text-white/80' : 'text-indigo-400/80'"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+                  <span :class="`text-[10px] font-mono leading-none ${isSelected(day) ? 'text-white' : 'text-slate-300'}`">
+                      {{ getDailySummary(day).total_records }}
+                  </span>
+              </div>
+              <div v-if="getDailySummary(day).favorite_records > 0" class="flex items-center gap-0.5" :title="`${getDailySummary(day).favorite_records} favorites`">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" :class="isSelected(day) ? 'text-white/80 stroke-white/80 fill-white/50' : 'text-amber-400/80 stroke-amber-400/80 fill-amber-400/50'"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                  <span :class="`text-[10px] font-mono leading-none ${isSelected(day) ? 'text-white' : 'text-slate-300'}`">
+                      {{ getDailySummary(day).favorite_records }}
+                  </span>
+              </div>
+          </div>
+
+          <!-- Mobile View: Color-coded Badges -->
+          <div class="flex sm:hidden items-center justify-center gap-1">
+              <span :class="`text-[9px] px-1 rounded-full font-medium ${isSelected(day) ? 'bg-white/20 text-white' : 'bg-indigo-500/20 text-indigo-400'}`">
+                  {{ getDailySummary(day).total_records }}
+              </span>
+              <span v-if="getDailySummary(day).favorite_records > 0" :class="`text-[9px] px-1 rounded-full font-medium ${isSelected(day) ? 'bg-white/20 text-white' : 'bg-amber-500/20 text-amber-400'}`">
+                  {{ getDailySummary(day).favorite_records }}
+              </span>
+          </div>
         </div>
       </button>
     </div>
