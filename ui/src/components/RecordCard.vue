@@ -23,18 +23,16 @@ const audioPlayer = ref<HTMLAudioElement | null>(null);
 const cardElement = ref<HTMLDivElement | null>(null); // Ref for the card's root element
 const isIntersecting = ref(false); // State to track if the card is in viewport
 const duration = ref(props.record.duration);
+const waveformData = ref<number[]>([]);
+const isWaveformReady = ref(false);
 
 // Responsive number of waveform bars
 const numWaveformBars = computed(() => {
-  // Adjust number of bars based on screen width or use a fixed small number for mobile
-  // For simplicity, let's use a fixed number for small screens, e.g., 30 bars
-  // You might want to use a more dynamic approach with window.innerWidth in a real app
   return window.innerWidth < 500 ? 30 : 60; // Example: 30 bars for screens < 500px, 60 otherwise
 });
 
-
 // Create a static, consistent waveform pattern based on the record ID
-const waveformData = computed(() => {
+const simulatedWaveform = computed(() => {
   const bars = numWaveformBars.value;
   // Simple pseudo-random generator seeded by id string length + index
   return Array.from({ length: bars }, (_, i) => {
@@ -42,6 +40,10 @@ const waveformData = computed(() => {
        // Generate values between 20% and 100% height
        return 20 + (Math.sin(seed) * 40 + 40);
   });
+});
+
+const displayWaveform = computed(() => {
+    return isWaveformReady.value ? waveformData.value : simulatedWaveform.value;
 });
 
 // To react to window.innerWidth changes, you'd typically need to
@@ -133,33 +135,94 @@ onMounted(() => {
   });
 });
 
-const togglePlay = () => {
-  const player = audioPlayer.value;
-  if (!player) return;
-
-  // If there's an error, do nothing.
-  if (isAudioError.value) return;
-
-  // On the very first play, set the src and load the audio.
-  if (!player.src) {
-    isLoadingOnDemand.value = true; // Start loading indicator
-    player.src = `/api/audio/${props.record.id}`;
-    player.load();
-    player.play().catch(e => {
-      console.error("Audio playback failed:", e);
-      isAudioError.value = true;
-    });
-    return;
-  }
-
-  if (isPlaying.value) {
-    player.pause();
-  } else {
-    if (player.ended) {
-      player.currentTime = 0;
+const generateWaveform = async (audioUrl: string) => {
+  try {
+    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const response = await fetch(audioUrl);
+    const arrayBuffer = await response.arrayBuffer();
+    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+    const channelData = audioBuffer.getChannelData(0);
+    const bars = numWaveformBars.value;
+    const samplesPerBar = Math.floor(channelData.length / bars);
+    const waveform = [];
+    
+    // Find the max peak in the entire audio for normalization
+    let maxPeak = 0;
+    for (let i = 0; i < channelData.length; i++) {
+        const peakValue = channelData[i];
+        if (peakValue !== undefined) {
+            const peak = Math.abs(peakValue);
+            if (peak > maxPeak) {
+                maxPeak = peak;
+            }
+        }
     }
-    player.play();
+    // Avoid division by zero for silent audio
+    const normalizationFactor = maxPeak > 0 ? 1 / maxPeak : 1;
+
+    for (let i = 0; i < bars; i++) {
+        let sum = 0;
+        const startIndex = i * samplesPerBar;
+        for (let j = 0; j < samplesPerBar; j++) {
+            const sampleIndex = startIndex + j;
+            if (sampleIndex < channelData.length) {
+                const sampleValue = channelData[sampleIndex];
+                if (sampleValue !== undefined) {
+                    // Normalize and add the sample
+                    sum += Math.abs(sampleValue) * normalizationFactor;
+                }
+            }
+        }
+        const avg = sum / samplesPerBar;
+
+        // Apply logarithmic scaling to amplify smaller values
+        // The addition of a small constant (e.g., 1) before log avoids log(0) which is -Infinity
+        // The scale factor (e.g., 50) adjusts the final height
+        const logValue = Math.log10(avg * 100 + 1) * 50;
+        const height = Math.min(100, logValue);
+        
+        waveform.push(Math.max(5, height)); // Ensure a minimum height of 5%
+    }
+    waveformData.value = waveform;
+    isWaveformReady.value = true;
+  } catch (error) {
+    console.error('Error generating waveform:', error);
+    // Fallback to simulated waveform is handled by displayWaveform computed property
   }
+};
+
+
+const togglePlay = () => {
+    const player = audioPlayer.value;
+    if (!player) return;
+
+    if (isAudioError.value) return;
+
+    // On the very first play, set the src, load audio, and generate waveform
+    if (!player.src) {
+        isLoadingOnDemand.value = true;
+        const audioUrl = `/api/audio/${props.record.id}`;
+        player.src = audioUrl;
+        player.load();
+
+        // Generate waveform in parallel
+        generateWaveform(audioUrl);
+
+        player.play().catch(e => {
+            console.error("Audio playback failed:", e);
+            isAudioError.value = true;
+        });
+        return;
+    }
+
+    if (isPlaying.value) {
+        player.pause();
+    } else {
+        if (player.ended) {
+            player.currentTime = 0;
+        }
+        player.play();
+    }
 };
 
 const handleSeek = (event: MouseEvent) => {
@@ -297,10 +360,10 @@ const timeString = computed(() => new Date(props.record.timestamp).toLocaleTimeS
            <!-- Visual Bars -->
            <div class="flex items-center justify-between h-8 gap-[2px]">
               <div
-                 v-for="(height, i) in waveformData"
+                 v-for="(height, i) in displayWaveform"
                  :key="i"
                  :class="`w-1 rounded-full transition-colors duration-150 ${
-                     (i / waveformData.length) <= (currentTime / duration) ? 'bg-indigo-500' : 'bg-slate-700 group-hover/waveform:bg-slate-600'
+                     (i / displayWaveform.length) <= (currentTime / duration) ? 'bg-indigo-500' : 'bg-slate-700 group-hover/waveform:bg-slate-600'
                  }`"
                  :style="{ height: `${height}%` }"
               />
