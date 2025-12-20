@@ -60,6 +60,14 @@ export const translations = {
       dateFormat: 'en-US',
       weekdays: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
     },
+    settings: {
+      title: 'Settings',
+      iconSectionTitle: 'iOS Home Screen Icon',
+      iconSectionDesc: 'Download the icon for your iPhone/iPad\'s "Add to Home Screen" feature. Place the downloaded {file} in the {folder} directory of the UI.',
+      iconDownloadBtn: 'Download 180x180 PNG',
+      moreSettingsTitle: 'More Settings',
+      moreSettingsDesc: 'More configuration options will be available here in the future.',
+    }
   },
   zh: {
     appTitle: '梦语者',
@@ -120,5 +128,13 @@ export const translations = {
       dateFormat: 'zh-CN',
       weekdays: ['日', '一', '二', '三', '四', '五', '六'],
     },
+    settings: {
+      title: '设置',
+      iconSectionTitle: 'iOS 主屏幕图标',
+      iconSectionDesc: '为您的 iPhone/iPad “添加到主屏幕”功能下载图标。请将下载的 {file} 文件放置到前端的 {folder} 目录下。',
+      iconDownloadBtn: '下载 180x180 PNG',
+      moreSettingsTitle: '更多设置',
+      moreSettingsDesc: '未来将在此处提供更多配置选项。',
+    }
   },
 }
