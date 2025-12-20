@@ -84,6 +84,7 @@ export const translations = {
         biometricNotSupported: 'Biometric login is not supported on this browser.',
       },
       biometric: {
+         subtitle: 'Use biometric login for faster access.',
          setupTitle: 'Enable Biometric Login?',
          setupDescription: 'Would you like to use Face ID or Touch ID to log in faster next time?',
          enableButton: 'Enable Biometrics',
@@ -176,6 +177,7 @@ export const translations = {
         biometricNotSupported: '此浏览器不支持生物识别登录。',
       },
       biometric: {
+         subtitle: '使用生物识别登录以更快访问。',
          setupTitle: '启用生物识别登录？',
          setupDescription: '您希望下次使用面容 ID 或触控 ID 更快地登录吗？',
          enableButton: '启用生物识别',

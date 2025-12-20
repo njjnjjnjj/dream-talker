@@ -15,10 +15,19 @@ const showBiometricSetup = ref(false);
 const biometricError = ref('');
 const isBiometricAvailable = ref(false);
 
-onMounted(() => {
+onMounted(async () => {
   // Check if WebAuthn is supported
   if (window.PublicKeyCredential) {
-    isBiometricAvailable.value = true;
+    try {
+      const response = await fetch('/api/webauthn/credentials/exist');
+      if (response.ok) {
+        const data = await response.json();
+        isBiometricAvailable.value = data.exists;
+      }
+    } catch (error) {
+      console.error('Failed to check credentials status:', error);
+      isBiometricAvailable.value = false;
+    }
   }
 });
 
@@ -41,7 +50,27 @@ const handleLogin = async () => {
 
     if (response.ok) {
       sessionStorage.setItem('access_token', accessCode.value);
-      showBiometricSetup.value = true;
+      
+      // Check if biometrics are already set up
+      try {
+        const credsResponse = await fetch('/api/webauthn/credentials/exist', {
+           headers: {
+            'Authorization': `Bearer ${accessCode.value}`
+          }
+        });
+        const credsData = await credsResponse.json();
+        
+        if (credsData.exists) {
+           router.push('/');
+        } else {
+           showBiometricSetup.value = true;
+        }
+      } catch (e) {
+        console.error("Failed to check existing credentials", e);
+        // Fallback to showing setup if check fails
+        showBiometricSetup.value = true;
+      }
+
     } else if (response.status === 429) {
       error.value = t.value.login.errors.tooManyAttempts;
     } else {
@@ -177,7 +206,7 @@ const skipBiometricSetup = () => {
       <h1 class="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-200 to-slate-100 mb-2">
         {{ t.login.title }}
       </h1>
-      <p class="text-slate-400 mb-8">{{ t.login.subtitle }}</p>
+      <p class="text-slate-400 mb-8">{{ showBiometricSetup ? t.login.biometric.subtitle : t.login.subtitle }}</p>
 
       <!-- Biometric Setup Dialog -->
       <div v-if="showBiometricSetup" class="bg-slate-800 p-6 rounded-lg shadow-lg animate-in fade-in duration-300">

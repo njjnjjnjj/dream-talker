@@ -123,6 +123,13 @@ async def auth_middleware(request: Request, call_next):
 class LoginRequest(BaseModel):
     access_code: str
 
+@app.get("/api/webauthn/credentials/exist")
+async def check_credentials_exist():
+    """检查是否存在已注册的 WebAuthn 凭证"""
+    creds = get_user_credentials(FIXED_USER_ID)
+    return {"exists": len(creds) > 0}
+
+
 @app.post("/api/login")
 async def login(request: LoginRequest, raw_request: Request):
     """验证访问码。"""
