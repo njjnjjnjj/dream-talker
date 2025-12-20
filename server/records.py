@@ -2,11 +2,15 @@ import os
 import re
 from fastapi import HTTPException, Request, Response
 from starlette.responses import FileResponse, StreamingResponse
-from typing import Generator
-from datetime import date, datetime
+from typing import Generator, Dict
+from datetime import date, datetime, timedelta
+import logging
 from database import get_db_connection
 from schemas import SleepRecord
 from storage import StorageBackend, LocalStorage
+
+# 配置日志
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 RECORDS_BASE_DIR = os.path.join(os.path.dirname(__file__), "data", "records")
 
@@ -27,7 +31,9 @@ def get_records_by_date(target_date: date) -> list[SleepRecord]:
                 GROUP BY r.id
                 ORDER BY r.is_favorite DESC, r.timestamp DESC
             """
-            cursor.execute(query, (target_date.strftime('%Y-%m-%d'),))
+            params = (target_date.strftime('%Y-%m-%d'),)
+            logging.info(f"Executing query: {query.strip()} with params: {params}")
+            cursor.execute(query, params)
             
             for row in cursor.fetchall():
                 # 将数据库行转换为 SleepRecord 对象
@@ -57,7 +63,10 @@ def get_audio_file_by_id(record_id: str, storage: StorageBackend, request: Reque
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT audio_url FROM records WHERE id = ?", (record_id,))
+            query = "SELECT audio_url FROM records WHERE id = ?"
+            params = (record_id,)
+            logging.info(f"Executing query: {query} with params: {params}")
+            cursor.execute(query, params)
             record = cursor.fetchone()
     except Exception as e:
         print(f"Error fetching record: {e}")
@@ -180,7 +189,9 @@ def get_statistics(start_date: date = None, end_date: date = None) -> Statistics
                 GROUP BY record_date
                 ORDER BY record_date ASC
             """
-            cursor.execute(query_daily, (start_str, end_str))
+            params_daily = (start_str, end_str)
+            logging.info(f"Executing daily stats query with params: {params_daily}")
+            cursor.execute(query_daily, params_daily)
             for row in cursor.fetchall():
                 daily_stats.append(DailyStat(
                     date=row['record_date'],
@@ -191,14 +202,16 @@ def get_statistics(start_date: date = None, end_date: date = None) -> Statistics
             # 2. Hourly Stats
             query_hourly = """
                 SELECT
-                    SUBSTR(timestamp, 12, 2) as hour_str,
+                    STRFTIME('%H', timestamp) as hour_str,
                     COUNT(id) as count
                 FROM records
                 WHERE SUBSTR(timestamp, 1, 10) BETWEEN ? AND ?
                 GROUP BY hour_str
                 ORDER BY hour_str ASC
             """
-            cursor.execute(query_hourly, (start_str, end_str))
+            params_hourly = (start_str, end_str)
+            logging.info(f"Executing hourly stats query with params: {params_hourly}")
+            cursor.execute(query_hourly, params_hourly)
             
             hourly_map = {f"{h:02d}": 0 for h in range(24)}
             for row in cursor.fetchall():
@@ -222,7 +235,9 @@ def get_statistics(start_date: date = None, end_date: date = None) -> Statistics
                 GROUP BY t.name
                 ORDER BY value DESC
             """
-            cursor.execute(query_tags, (start_str, end_str))
+            params_tags = (start_str, end_str)
+            logging.info(f"Executing tags stats query with params: {params_tags}")
+            cursor.execute(query_tags, params_tags)
             for row in cursor.fetchall():
                 tag_stats.append(TagStat(
                     name=row['name'],
@@ -255,11 +270,13 @@ def get_monthly_record_activity(year: int, month: int) -> MonthlyActivity:
                     COUNT(id) as total_records,
                     SUM(CASE WHEN is_favorite = 1 THEN 1 ELSE 0 END) as favorite_records
                 FROM records
-                WHERE SUBSTR(timestamp, 1, 4) = ? AND SUBSTR(timestamp, 6, 2) = ?
+                WHERE SUBSTR(timestamp, 1, 7) = ?
                 GROUP BY record_date
             """
-            month_str = str(month).zfill(2)
-            cursor.execute(query, (str(year), month_str))
+            year_month_str = f"{year}-{month:02d}"
+            params_monthly = (year_month_str,)
+            logging.info(f"Executing monthly activity query with params: {params_monthly}")
+            cursor.execute(query, params_monthly)
             
             for row in cursor.fetchall():
                 activity_data[row['record_date']] = DailyActivitySummary(
@@ -283,10 +300,10 @@ def update_record_favorite_status(record_id: str, is_favorite: bool) -> bool:
             favorite_value = 1 if is_favorite else 0
             now = datetime.now().isoformat()
             
-            cursor.execute(
-                "UPDATE records SET is_favorite = ?, updated_at = ? WHERE id = ?",
-                (favorite_value, now, record_id)
-            )
+            query_fav = "UPDATE records SET is_favorite = ?, updated_at = ? WHERE id = ?"
+            params_fav = (favorite_value, now, record_id)
+            logging.info(f"Executing favorite update query with params: {params_fav}")
+            cursor.execute(query_fav, params_fav)
             conn.commit()
             return cursor.rowcount > 0 # 如果更新了一行或多行，则返回 True
     except Exception as e:

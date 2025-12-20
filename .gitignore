@@ -211,3 +211,4 @@ __marimo__/
 .DS_Store
 ui/.vite/deps/_metadata.json
 ui/.vite/deps/package.json
+server/logs/server.log.1
