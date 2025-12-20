@@ -31,6 +31,12 @@ onMounted(() => {
   if (!waveformContainer.value || !cardElement.value) return;
 
   // Initialize WaveSurfer
+  const token = localStorage.getItem('access_token');
+  const headers = new Headers();
+  if (token) {
+    headers.append('Authorization', `Bearer ${token}`);
+  }
+
   wavesurfer.value = WaveSurfer.create({
     container: waveformContainer.value,
     waveColor: 'rgb(51 65 85)', // slate-700
@@ -41,6 +47,9 @@ onMounted(() => {
     height: 32,
     cursorWidth: 0,
     normalize: true,
+    fetchParams: {
+      headers: headers
+    }
   });
 
   const ws = wavesurfer.value;
@@ -80,6 +89,11 @@ onMounted(() => {
         // Load audio when card is about to be visible, if not already loaded
         if (!isAudioLoaded.value && !isLoadingOnDemand.value) {
           isLoadingOnDemand.value = true;
+          const token = localStorage.getItem('access_token');
+          const headers = new Headers();
+          if (token) {
+            headers.append('Authorization', `Bearer ${token}`);
+          }
           ws.load(`/api/audio/${props.record.id}`);
         }
         // No need to unobserve, as loading should only happen once.
@@ -110,6 +124,11 @@ const togglePlay = () => {
       // If for some reason observer didn't trigger, trigger load now.
       if (!isLoadingOnDemand.value) {
           isLoadingOnDemand.value = true;
+          const token = localStorage.getItem('access_token');
+          const headers = new Headers();
+          if (token) {
+            headers.append('Authorization', `Bearer ${token}`);
+          }
           ws.load(`/api/audio/${props.record.id}`);
       }
       // Play once ready

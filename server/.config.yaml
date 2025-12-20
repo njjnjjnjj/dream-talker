@@ -19,3 +19,7 @@ storage:
     secret_key: "Nijiajun@1108"
     bucket_name: "dream-talker"
     secure: false
+
+security:
+  # IMPORTANT: Change this to a long, random string for security!
+  access_code: "Nijiajun@1108"

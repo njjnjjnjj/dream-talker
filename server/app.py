@@ -3,10 +3,11 @@ import logging
 import uvicorn
 import yaml
 import os
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request, Depends
+from fastapi.responses import JSONResponse
 from datetime import date, timedelta
 from typing import List, Dict, Optional
-from pydantic import BaseModel # 导入 BaseModel 用于请求体
+from pydantic import BaseModel
 
 from log import init_log
 from vad.engine import VadEngine
@@ -36,15 +37,25 @@ stt_engine: STTEngine = None
 storage_backend: StorageBackend = None
 
 
+ACCESS_CODE = None
+
 async def startup_event():
-    """在应用启动时加载 VAD 和 STT 模型。"""
-    global vad_engine, stt_engine, storage_backend
+    """在应用启动时加载配置和模型。"""
+    global vad_engine, stt_engine, storage_backend, ACCESS_CODE
     config_path = os.path.join(os.path.dirname(__file__), '.config.yaml')
     config = {}
     if os.path.exists(config_path):
         with open(config_path, 'r', encoding='utf-8') as f:
             config = yaml.safe_load(f)
     
+    # 加载安全配置
+    security_config = config.get('security', {})
+    ACCESS_CODE = security_config.get('access_code')
+    if not ACCESS_CODE:
+        logger.warning("安全警告: 访问码未在 .config.yaml 中设置。认证将不会启用。")
+    elif ACCESS_CODE == "changeme-please":
+        logger.warning("安全警告: 您正在使用默认的访问码 'changeme-please'。请立即在 .config.yaml 中修改为一个强密码。")
+
     # 初始化存储后端
     storage_config = config.get('storage', {})
     storage_backend = get_storage_backend(storage_config)
@@ -57,6 +68,42 @@ async def startup_event():
     # 初始化 STT 引擎
     stt_config = config.get('stt', {})
     stt_engine = get_stt_engine(stt_config)
+
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    """中间件，用于保护 API 路由。"""
+    if ACCESS_CODE and request.url.path.startswith("/api/") and not request.url.path == "/api/login":
+        auth_header = request.headers.get("Authorization")
+        if auth_header is None:
+            return JSONResponse(status_code=401, content={"detail": "未提供认证信息"})
+        
+        try:
+            scheme, token = auth_header.split()
+            if scheme.lower() != "bearer" or token != ACCESS_CODE:
+                raise ValueError("无效的 Token 或 Scheme")
+        except ValueError as e:
+            return JSONResponse(status_code=401, content={"detail": str(e)})
+
+    response = await call_next(request)
+    return response
+
+
+class LoginRequest(BaseModel):
+    access_code: str
+
+@app.post("/api/login")
+async def login(request: LoginRequest):
+    """验证访问码。"""
+    # 强制要求 ACCESS_CODE 必须被设置
+    if not ACCESS_CODE:
+        logger.error("安全风险：尝试登录，但服务器未配置 access_code。")
+        raise HTTPException(status_code=500, detail="服务器认证未正确配置")
+
+    if request.access_code == ACCESS_CODE:
+        return {"status": "success", "message": "登录成功"}
+    else:
+        raise HTTPException(status_code=401, detail="无效的访问码")
 
 
 @app.websocket("/vad")

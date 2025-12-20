@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
-import { RouterLink, RouterView } from 'vue-router';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
+import { RouterLink, RouterView, useRoute } from 'vue-router';
 import { useLanguage } from './composables/useLanguage';
 import { Moon, Mic, BarChart2, Settings, Globe, ArrowUp } from 'lucide-vue-next';
 
 const { t, language, setLanguage } = useLanguage();
+const route = useRoute();
 const showBackToTop = ref(false);
+
+const isLoginPage = computed(() => route.name === 'login');
 
 const handleScroll = () => {
   showBackToTop.value = window.scrollY > window.innerHeight;
@@ -47,7 +50,7 @@ const scrollToTop = () => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950/20">
+  <div v-if="!isLoginPage" class="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950/20">
     
     <!-- Header -->
     <header class="sticky top-0 z-40 bg-slate-950/80 backdrop-blur-lg border-b border-slate-800">
@@ -122,6 +125,7 @@ const scrollToTop = () => {
       </button>
     </Transition>
   </div>
+  <RouterView v-else />
 </template>
 
 <style>

@@ -3,6 +3,29 @@ import type { SleepRecord, MonthlyActivity, StatisticsResponse } from '../types'
 
 const API_BASE_URL = '/api';
 
+const authedFetch = async (url: string, options: RequestInit = {}): Promise<Response> => {
+  const token = localStorage.getItem('access_token');
+  
+  const headers = new Headers(options.headers || {});
+  if (token) {
+    headers.append('Authorization', `Bearer ${token}`);
+  }
+
+  const response = await fetch(url, { ...options, headers });
+
+  if (response.status === 401) {
+    // Token is invalid or expired, redirect to login
+    localStorage.removeItem('access_token');
+    // Use location.href to force a full page reload to clear any state
+    window.location.href = '/login';
+    // Throw an error to stop further execution in the current call chain
+    throw new Error('Unauthorized');
+  }
+
+  return response;
+};
+
+
 export function useRecordsApi() {
   const records = ref<SleepRecord[]>([]);
   const monthlyActivity = ref<MonthlyActivity | null>(null);
@@ -19,8 +42,9 @@ export function useRecordsApi() {
     error.value = null;
     try {
       const dateString = date.toISOString().split('T')[0];
-      const response = await fetch(`${API_BASE_URL}/records?date=${dateString}`);
+      const response = await authedFetch(`${API_BASE_URL}/records?date=${dateString}`);
       if (!response.ok) {
+        // authedFetch will handle 401, this is for other errors
         throw new Error('Failed to fetch records');
       }
       records.value = await response.json();
@@ -57,7 +81,7 @@ export function useRecordsApi() {
     isLoading.value = true;
     error.value = null;
     try {
-      const response = await fetch(`${API_BASE_URL}/records/activity?year=${year}&month=${month}`);
+      const response = await authedFetch(`${API_BASE_URL}/records/activity?year=${year}&month=${month}`);
       if (!response.ok) {
         throw new Error('Failed to fetch monthly activity');
       }
@@ -79,7 +103,7 @@ export function useRecordsApi() {
     isLoading.value = true;
     error.value = null;
     try {
-      const response = await fetch(`${API_BASE_URL}/records/${recordId}/favorite`, {
+      const response = await authedFetch(`${API_BASE_URL}/records/${recordId}/favorite`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -116,7 +140,7 @@ export function useRecordsApi() {
           query = `days=7`;
       }
 
-      const response = await fetch(`${API_BASE_URL}/statistics?${query}`);
+      const response = await authedFetch(`${API_BASE_URL}/statistics?${query}`);
       if (!response.ok) {
         throw new Error('Failed to fetch statistics');
       }

@@ -67,6 +67,18 @@ export const translations = {
       iconDownloadBtn: 'Download 180x180 PNG',
       moreSettingsTitle: 'More Settings',
       moreSettingsDesc: 'More configuration options will be available here in the future.',
+    },
+    login: {
+      title: 'Dream Catcher',
+      subtitle: 'Enter Access Code to Continue',
+      placeholder: 'Access Code',
+      button: 'Enter',
+      verifying: 'Verifying...',
+      errors: {
+        empty: 'Please enter the access code.',
+        failed: 'Login failed. Please check the code and try again.',
+        unknown: 'An error occurred. Please try again later.',
+      }
     }
   },
   zh: {
@@ -135,6 +147,18 @@ export const translations = {
       iconDownloadBtn: '下载 180x180 PNG',
       moreSettingsTitle: '更多设置',
       moreSettingsDesc: '未来将在此处提供更多配置选项。',
+    },
+    login: {
+      title: '梦语者',
+      subtitle: '请输入访问码以继续',
+      placeholder: '访问码',
+      button: '进入',
+      verifying: '验证中...',
+      errors: {
+        empty: '请输入访问码。',
+        failed: '登录失败，请检查访问码后重试。',
+        unknown: '发生未知错误，请稍后重试。',
+      }
     }
   },
 }
