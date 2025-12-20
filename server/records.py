@@ -202,7 +202,7 @@ def get_statistics(start_date: date = None, end_date: date = None) -> Statistics
             # 2. Hourly Stats
             query_hourly = """
                 SELECT
-                    STRFTIME('%H', timestamp) as hour_str,
+                    SUBSTR(timestamp, 12, 2) as hour_str,
                     COUNT(id) as count
                 FROM records
                 WHERE SUBSTR(timestamp, 1, 10) BETWEEN ? AND ?
