@@ -59,6 +59,13 @@ class StorageBackend(abc.ABC):
         """
         pass
 
+    @abc.abstractmethod
+    def delete(self, file_path: str) -> bool:
+        """
+        删除文件。
+        """
+        pass
+
 class LocalStorage(StorageBackend):
     """
     本地文件系统存储实现。
@@ -105,6 +112,17 @@ class LocalStorage(StorageBackend):
     def exists(self, file_path: str) -> bool:
         full_path = os.path.join(self.base_dir, file_path)
         return os.path.exists(full_path)
+
+    def delete(self, file_path: str) -> bool:
+        full_path = os.path.join(self.base_dir, file_path)
+        if os.path.exists(full_path):
+            try:
+                os.remove(full_path)
+                return True
+            except OSError as e:
+                logger.error(f"Error deleting local file {full_path}: {e}")
+                return False
+        return False
 
 class MinioStorage(StorageBackend):
     """
@@ -386,6 +404,30 @@ class MinioStorage(StorageBackend):
             
             # MinIO 失败，查本地
             return self.local_backup.exists(file_path)
+
+    def delete(self, file_path: str) -> bool:
+        """
+        删除文件。同时尝试从 MinIO 和本地备份删除。
+        """
+        success = True
+        
+        # 尝试从 MinIO 删除
+        try:
+            self.client.remove_object(self.bucket_name, file_path)
+            logger.info(f"Deleted file from MinIO: {file_path}")
+        except Exception as e:
+            logger.error(f"Failed to delete file from MinIO {file_path}: {e}")
+            success = False # 标记失败，但继续尝试删除本地备份
+        
+        # 尝试从本地备份删除
+        if self.local_backup.exists(file_path):
+            if not self.local_backup.delete(file_path):
+                success = False
+                logger.error(f"Failed to delete file from local backup {file_path}")
+            else:
+                logger.info(f"Deleted file from local backup: {file_path}")
+                
+        return success
 
 def get_storage_backend(config: dict) -> StorageBackend:
     """

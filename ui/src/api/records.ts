@@ -152,6 +152,30 @@ export function useRecordsApi() {
     }
   };
 
+  /**
+   * Deletes a sleep record.
+   * @param recordId - The ID of the record to delete
+   */
+  const deleteRecord = async (recordId: string) => {
+    isLoading.value = true;
+    error.value = null;
+    try {
+      const response = await authedFetch(`${API_BASE_URL}/records/${recordId}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        throw new Error('Failed to delete record');
+      }
+      // Remove the deleted record from the local list
+      records.value = records.value.filter(record => record.id !== recordId);
+    } catch (err: any) {
+      error.value = err.message || 'An unknown error occurred';
+      throw err; // Re-throw to let the component handle UI feedback
+    } finally {
+      isLoading.value = false;
+    }
+  };
+
   return {
     records,
     monthlyActivity,
@@ -163,5 +187,6 @@ export function useRecordsApi() {
     fetchMonthlyActivity,
     updateRecordFavoriteStatus,
     fetchStatistics,
+    deleteRecord,
   };
 }

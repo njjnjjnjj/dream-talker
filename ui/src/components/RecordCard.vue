@@ -8,14 +8,16 @@ import WaveSurfer from 'wavesurfer.js';
 interface RecordCardProps {
   record: SleepRecord;
   onUpdateRecord?: (id: string, updates: Partial<SleepRecord>) => void;
+  isDeleteMode?: boolean;
 }
 
 const props = defineProps<RecordCardProps>();
-const emit = defineEmits(['updateRecord']);
+const emit = defineEmits(['updateRecord', 'deleteRecord']);
 
 const { t, language } = useLanguage();
-const { updateRecordFavoriteStatus } = useRecordsApi();
+const { updateRecordFavoriteStatus, deleteRecord } = useRecordsApi();
 const isPlaying = ref(false);
+const showDeleteConfirm = ref(false);
 const isAudioLoaded = ref(false); // Track audio loading state
 const isAudioError = ref(false); // Track audio error state
 const isLoadingOnDemand = ref(false); // New state for on-demand loading
@@ -174,6 +176,22 @@ const toggleFavorite = async () => {
   }
 };
 
+const handleDelete = () => {
+  showDeleteConfirm.value = true;
+};
+
+const confirmDelete = async () => {
+  try {
+    await deleteRecord(props.record.id);
+    emit('deleteRecord', props.record.id);
+  } catch (error) {
+    console.error('Failed to delete record:', error);
+    alert(language.value === 'zh' ? '删除失败' : 'Failed to delete');
+  } finally {
+    showDeleteConfirm.value = false;
+  }
+};
+
 const timeString = computed(() => new Date(props.record.timestamp).toLocaleTimeString(language.value === 'zh' ? 'zh-CN' : 'en-US', {
   hour: '2-digit',
   minute: '2-digit',
@@ -185,7 +203,7 @@ const timeString = computed(() => new Date(props.record.timestamp).toLocaleTimeS
 <template>
   <div
     ref="cardElement"
-    :class="`bg-slate-800 rounded-xl p-5 border transition-all shadow-md group ${
+    :class="`relative bg-slate-800 rounded-xl p-5 border transition-all shadow-md group ${
       record.is_favorite
         ? 'border-amber-500/30 hover:border-amber-500/50 shadow-amber-900/10'
         : 'border-slate-700/50 hover:border-slate-600'
@@ -212,18 +230,29 @@ const timeString = computed(() => new Date(props.record.timestamp).toLocaleTimeS
           </div>
       </div>
       
-      <button 
-        @click="toggleFavorite"
-        :class="`p-2 rounded-full transition-all ${
-          record.is_favorite
-            ? 'text-amber-400 bg-amber-400/10 hover:bg-amber-400/20'
-            : 'text-slate-600 hover:text-slate-400 hover:bg-slate-700'
-        }`"
-        title="Toggle Favorite"
-      >
-        <!-- Star size={20} fill={record.is_favorite ? "currentColor" : "none"} -->
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" :fill="record.is_favorite ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-star"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-      </button>
+      <div class="flex items-center gap-1">
+        <button 
+          @click="toggleFavorite"
+          :class="`p-2 rounded-full transition-all ${
+            record.is_favorite
+              ? 'text-amber-400 bg-amber-400/10 hover:bg-amber-400/20'
+              : 'text-slate-600 hover:text-slate-400 hover:bg-slate-700'
+          }`"
+          title="Toggle Favorite"
+        >
+          <!-- Star size={20} fill={record.is_favorite ? "currentColor" : "none"} -->
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" :fill="record.is_favorite ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-star"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        </button>
+
+        <button 
+          v-if="isDeleteMode"
+          @click="handleDelete"
+          class="p-2 rounded-full transition-all text-slate-600 hover:text-red-400 hover:bg-slate-700"
+          title="Delete Record"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trash-2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+        </button>
+      </div>
     </div>
 
     <!-- Audio Player Container -->
@@ -288,7 +317,7 @@ const timeString = computed(() => new Date(props.record.timestamp).toLocaleTimeS
     </div>
 
     <!-- Tags -->
-    <div v-if="record.tags && record.tags.length > 0" class="flex gap-2 flex-wrap">
+    <div v-if="record.tags && record.tags.length > 0" class="flex gap-2 flex-wrap mt-2">
         <span v-for="tag in record.tags" :key="tag" class="flex items-center gap-1 text-xs font-medium text-slate-400 bg-slate-700/50 px-2 py-1 rounded-md border border-slate-700 hover:bg-slate-700 hover:text-slate-200 transition-colors cursor-default">
             <!-- Tag size={10} -->
             <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-tag"><path d="M12.586 1.586A2 2 0 0 0 11.172 1H3a2 2 0 0 0-2 2v8.172a2 2 0 0 0 .586 1.414L12 22l10-10L12.586 1.586z"/><circle cx="7" cy="7" r="2"/></svg>
@@ -297,6 +326,23 @@ const timeString = computed(() => new Date(props.record.timestamp).toLocaleTimeS
         <span :class="record.confidence > 0.8 ? 'text-xs px-2 py-1 text-emerald-500 ml-auto' : 'text-xs px-2 py-1 text-amber-500 ml-auto'">
             {{ Math.round(record.confidence * 100) }}% {{ t.card.match }}
         </span>
+    </div>
+
+    <!-- Delete Confirmation Overlay -->
+    <div v-if="showDeleteConfirm" class="absolute inset-0 bg-slate-900/5 backdrop-blur-sm z-10 flex flex-col items-center justify-center rounded-xl p-6 text-center animate-in fade-in duration-200">
+      <div class="bg-red-500/10 p-3 rounded-full mb-3 text-red-500">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-alert-triangle"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>
+      </div>
+      <h4 class="text-white font-medium mb-1">{{ language === 'zh' ? '删除录音?' : 'Delete Recording?' }}</h4>
+      <p class="text-slate-400 text-sm mb-4">{{ language === 'zh' ? '此操作不可恢复。' : 'This action cannot be undone.' }}</p>
+      <div class="flex gap-3">
+        <button @click="showDeleteConfirm = false" class="px-4 py-2 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 transition-colors text-sm font-medium border border-slate-700">
+          {{ language === 'zh' ? '取消' : 'Cancel' }}
+        </button>
+        <button @click="confirmDelete" class="px-4 py-2 rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors text-sm font-medium shadow-lg shadow-red-500/20">
+          {{ language === 'zh' ? '删除' : 'Delete' }}
+        </button>
+      </div>
     </div>
 
   </div>

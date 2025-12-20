@@ -14,7 +14,7 @@ from vad.engine import VadEngine
 from stt import get_stt_engine, STTEngine
 from database import init_db, add_record
 from schemas import MonthlyActivity, SleepRecordCreate, SleepRecord, StatisticsResponse
-from records import get_records_by_date, get_audio_file_by_id, get_monthly_record_activity, update_record_favorite_status, get_statistics
+from records import get_records_by_date, get_audio_file_by_id, get_monthly_record_activity, update_record_favorite_status, get_statistics, delete_record
 from storage import get_storage_backend, StorageBackend
 from auth import (
     get_user_credentials,
@@ -331,6 +331,18 @@ async def update_favorite_status(record_id: str, request: UpdateFavoriteRequest)
     if not success:
         raise HTTPException(status_code=404, detail="Record not found or update failed")
     return {"status": "success", "message": "Favorite status updated"}
+
+
+@app.delete("/api/records/{record_id}")
+async def delete_single_record(record_id: str):
+    """
+    删除单条梦话记录及其音频文件。
+    """
+    success = delete_record(record_id, storage_backend)
+    if not success:
+        # 这里实际上 delete_record 可能会抛出异常，所以这个分支可能不会走到
+        raise HTTPException(status_code=404, detail="Record not found or deletion failed")
+    return {"status": "success", "message": "Record deleted"}
 
 
 @app.get("/api/audio/{record_id}")

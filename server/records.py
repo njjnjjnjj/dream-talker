@@ -309,3 +309,59 @@ def update_record_favorite_status(record_id: str, is_favorite: bool) -> bool:
     except Exception as e:
         print(f"Error updating favorite status for record {record_id}: {e}")
         raise HTTPException(status_code=500, detail="Could not update favorite status")
+
+def delete_record(record_id: str, storage: StorageBackend) -> bool:
+    """
+    删除指定的梦话记录及对应的音频文件。
+    """
+    # 1. 获取记录信息以得到 audio_url
+    record = None
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            query = "SELECT audio_url FROM records WHERE id = ?"
+            cursor.execute(query, (record_id,))
+            record = cursor.fetchone()
+    except Exception as e:
+        print(f"Error fetching record for deletion: {e}")
+        raise HTTPException(status_code=500, detail="Could not fetch record info")
+
+    if not record:
+        raise HTTPException(status_code=404, detail="Record not found")
+
+    audio_url = record['audio_url']
+
+    # 2. 从存储中删除文件
+    # 即使数据库删除失败，我们也尝试删除文件，或者反过来？
+    # 通常应该先删除数据库记录，再删除文件，或者使用事务。
+    # 这里我们先尝试从数据库删除，如果成功再删除文件。
+    # 因为文件删除不可逆且较难回滚，而数据库操作在事务中。
+    
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            
+            # 删除标签关联
+            cursor.execute("DELETE FROM record_tags WHERE record_id = ?", (record_id,))
+            
+            # 删除记录
+            cursor.execute("DELETE FROM records WHERE id = ?", (record_id,))
+            
+            if cursor.rowcount == 0:
+                # 理论上前面查到了，这里不应该发生，除非并发删除
+                raise HTTPException(status_code=404, detail="Record not found during deletion")
+            
+            conn.commit()
+    except Exception as e:
+        print(f"Error deleting record from database: {e}")
+        raise HTTPException(status_code=500, detail="Could not delete record from database")
+
+    # 3. 删除文件
+    # 如果文件删除失败，我们只记录日志，不回滚数据库，因为记录已经不存在了
+    try:
+        storage.delete(audio_url)
+    except Exception as e:
+        logging.error(f"Failed to delete audio file {audio_url} for record {record_id}: {e}")
+        # 不抛出异常，因为记录已经删除了
+
+    return True

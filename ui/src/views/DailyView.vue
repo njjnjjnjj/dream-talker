@@ -16,6 +16,7 @@ const searchTerm = ref('');
 const showFavoritesOnly = ref(false);
 const sortOrder = ref<'asc' | 'desc'>('asc');
 const isTimelineExpanded = ref(false);
+const isDeleteMode = ref(false);
 
 // Load data on date change
 onMounted(() => {
@@ -37,6 +38,10 @@ const toggleSortOrder = () => {
 
 const handleUpdateRecord = (id: string, updates: Partial<SleepRecord>) => {
   records.value = records.value.map(rec => rec.id === id ? { ...rec, ...updates } : rec);
+};
+
+const handleDeleteRecord = (id: string) => {
+  records.value = records.value.filter(rec => rec.id !== id);
 };
 
 // Filter and sort records
@@ -136,6 +141,15 @@ const scrollToRecord = (recordId: string) => {
               <path d="M7 4v16"/>
             </svg>
           </button>
+
+          <button
+            @click="isDeleteMode = !isDeleteMode"
+            class="p-2 rounded-lg transition-all duration-200 border"
+            :class="isDeleteMode ? 'bg-red-500/10 border-red-500/30 text-red-400' : 'text-slate-400 hover:text-red-400 bg-slate-900/50 hover:bg-slate-800 border-transparent hover:border-slate-700'"
+            title="Toggle Delete Mode"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trash-2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+          </button>
       </div>
     </div>
     
@@ -160,7 +174,9 @@ const scrollToRecord = (recordId: string) => {
           :key="record.id"
           :id="`record-${record.id}`"
           :record="getRecordWithAudioUrl(record)"
+          :is-delete-mode="isDeleteMode"
           @update-record="handleUpdateRecord"
+          @delete-record="handleDeleteRecord"
         />
       </template>
       <template v-else>
