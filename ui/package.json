@@ -10,14 +10,18 @@
     "dev": "vite",
     "build": "run-p type-check \"build-only {@}\" --",
     "preview": "vite preview",
+    "start": "node server/index.js",
     "build-only": "vite build",
     "type-check": "vue-tsc --build",
     "format": "prettier --write --experimental-cli src/"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.18",
+    "connect-history-api-fallback": "^2.0.0",
     "d3": "^7.9.0",
     "echarts": "^6.0.0",
+    "express": "^5.2.1",
+    "http-proxy-middleware": "^3.0.5",
     "lucide-vue-next": "^0.562.0",
     "pinia": "^3.0.4",
     "tailwindcss": "^4.1.18",
