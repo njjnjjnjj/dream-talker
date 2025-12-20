@@ -77,6 +77,7 @@ export const translations = {
       errors: {
         empty: 'Please enter the access code.',
         failed: 'Login failed. Please check the code and try again.',
+        tooManyAttempts: 'Too many attempts. Please try again later.',
         unknown: 'An error occurred. Please try again later.',
       }
     }
@@ -157,6 +158,7 @@ export const translations = {
       errors: {
         empty: '请输入访问码。',
         failed: '登录失败，请检查访问码后重试。',
+        tooManyAttempts: '尝试次数过多，请稍后再试。',
         unknown: '发生未知错误，请稍后重试。',
       }
     }

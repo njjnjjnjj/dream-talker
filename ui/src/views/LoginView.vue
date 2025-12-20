@@ -31,6 +31,8 @@ const handleLogin = async () => {
     if (response.ok) {
       localStorage.setItem('access_token', accessCode.value);
       router.push('/');
+    } else if (response.status === 429) {
+      error.value = t.value.login.errors.tooManyAttempts;
     } else {
       error.value = t.value.login.errors.failed;
     }

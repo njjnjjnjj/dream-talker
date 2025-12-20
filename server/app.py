@@ -5,7 +5,7 @@ import yaml
 import os
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request, Depends
 from fastapi.responses import JSONResponse
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 from typing import List, Dict, Optional
 from pydantic import BaseModel
 
@@ -38,6 +38,12 @@ storage_backend: StorageBackend = None
 
 
 ACCESS_CODE = None
+
+# 简单的内存速率限制存储
+# 格式: {ip_address: {"count": int, "blocked_until": datetime}}
+login_attempts = {}
+MAX_LOGIN_ATTEMPTS = 5
+BLOCK_DURATION_MINUTES = 10
 
 async def startup_event():
     """在应用启动时加载配置和模型。"""
@@ -93,16 +99,42 @@ class LoginRequest(BaseModel):
     access_code: str
 
 @app.post("/api/login")
-async def login(request: LoginRequest):
+async def login(request: LoginRequest, raw_request: Request):
     """验证访问码。"""
     # 强制要求 ACCESS_CODE 必须被设置
     if not ACCESS_CODE:
         logger.error("安全风险：尝试登录，但服务器未配置 access_code。")
         raise HTTPException(status_code=500, detail="服务器认证未正确配置")
 
+    client_ip = raw_request.client.host
+    now = datetime.now()
+
+    # 检查 IP 是否被封禁
+    if client_ip in login_attempts:
+        record = login_attempts[client_ip]
+        if record.get("blocked_until") and record["blocked_until"] > now:
+            remaining = (record["blocked_until"] - now).seconds // 60 + 1
+            logger.warning(f"IP {client_ip} 尝试登录，但已被封禁。剩余时间: {remaining} 分钟")
+            raise HTTPException(status_code=429, detail=f"尝试次数过多，请 {remaining} 分钟后再试")
+
     if request.access_code == ACCESS_CODE:
+        # 登录成功，清除该 IP 的失败记录
+        if client_ip in login_attempts:
+            del login_attempts[client_ip]
         return {"status": "success", "message": "登录成功"}
     else:
+        # 登录失败，记录尝试次数
+        if client_ip not in login_attempts:
+            login_attempts[client_ip] = {"count": 0, "blocked_until": None}
+        
+        record = login_attempts[client_ip]
+        record["count"] += 1
+        
+        if record["count"] >= MAX_LOGIN_ATTEMPTS:
+            record["blocked_until"] = now + timedelta(minutes=BLOCK_DURATION_MINUTES)
+            logger.warning(f"IP {client_ip} 因连续 {MAX_LOGIN_ATTEMPTS} 次登录失败被封禁 {BLOCK_DURATION_MINUTES} 分钟。")
+            raise HTTPException(status_code=429, detail="尝试次数过多，请稍后再试")
+            
         raise HTTPException(status_code=401, detail="无效的访问码")
 
 
